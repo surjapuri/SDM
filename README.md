@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # QRaksha
 ### QR Verify + Scam Shield, unified under one name
 
@@ -91,3 +92,6 @@ and `functions/screenshotCheck.js`.
 
 Free threat-intelligence data from OpenPhish, PhishTank, and URLhaus
 (abuse.ch) community feeds.
+=======
+# QRaksha
+>>>>>>> 19f00c2ff2abd2a650b0a13b6c805b070b6a140e
