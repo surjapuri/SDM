@@ -140,12 +140,17 @@ window.QRVAiScamCheck = (function () {
   function renderMessageResult(result, { aiRan }) {
     const circumference = 2 * Math.PI * 50;
     const offset = circumference * (1 - result.score / 100);
-    $("msgRiskGaugeValue").style.strokeDasharray = String(circumference);
-    $("msgRiskGaugeValue").style.strokeDashoffset = String(offset);
-    $("msgRiskGaugeValue").setAttribute("data-level", result.verdict.level);
-    setText($("msgRiskScoreNumber"), result.score);
-    setText($("msgRiskVerdictChip"), result.verdict.label);
-    $("msgRiskVerdictChip").setAttribute("data-level", result.verdict.level);
+    const gaugeValue = $("msgRiskGaugeValue");
+    if (gaugeValue) {
+      gaugeValue.style.strokeDasharray = String(circumference);
+      gaugeValue.style.strokeDashoffset = String(offset);
+      gaugeValue.setAttribute("data-level", result.verdict.level);
+    }
+    if ($("msgRiskScoreNumber")) setText($("msgRiskScoreNumber"), result.score);
+    if ($("msgRiskVerdictChip")) {
+      setText($("msgRiskVerdictChip"), result.verdict.label);
+      $("msgRiskVerdictChip").setAttribute("data-level", result.verdict.level);
+    }
     setText($("msgSourceHeading"), result.source);
     setText($("msgExplanation"), result.explanation);
     $("msgReportSection").hidden = false;
