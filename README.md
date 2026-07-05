@@ -26,9 +26,7 @@ help right now, not after a page loads.
 
 ## The three-tier system — this is the important part
 
-This app is designed so that **AI is a bonus layer, never a dependency.**
-The developer can disable the AI feature entirely (e.g. for cost control)
-at any time, and everything else keeps working:
+
 
 | Tier | What it does | Network needed? | Costs money? |
 |---|---|---|---|
@@ -36,9 +34,7 @@ at any time, and everything else keeps working:
 | **2 — Open threat-intel** | Checks URLs/domains against free OpenPhish, PhishTank, and URLhaus community feeds, plus a hand-curated Indian scam-phrase list | Only to fetch bundled static files, no live API calls | No |
 | **3 — Mesh AI second opinion** | Deeper reasoning via Mesh API's auto-routed models, grounded against a RAG corpus of real Indian scam patterns; required for reading screenshot content | Yes | Yes — and can be switched off at any time via `functions/aiStatus.js` |
 
-If Tier 3 is off, times out, or errors for any reason, the app shows a
-calm "AI unavailable — showing offline + open threat-intel analysis only"
-message and continues working. It never blocks or breaks Tier 1/2.
+
 
 ## Privacy
 
