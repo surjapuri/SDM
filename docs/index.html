@@ -100,9 +100,9 @@
   <!-- ============================================================
        POINT 2 — Scan Alert Banner (Panic Mode trigger)
   ============================================================ -->
-  <div class="sticky top-0 z-40 bg-danger/15 border-b border-danger/40 backdrop-blur">
-    <button id="btnOpenPanicMode" type="button" class="w-full flex items-center justify-center gap-2 py-2.5 px-4 text-sm font-semibold text-danger">
-      <span aria-hidden="true">🚨</span> Being scammed right now? Tap here for immediate help
+  <div class="sticky top-0 z-40 qrv-flash-banner border-b border-danger/40 backdrop-blur">
+    <button id="btnOpenPanicMode" type="button" class="w-full flex items-center justify-center gap-2 py-3 px-4 text-sm font-extrabold text-white tracking-wide" data-i18n="scammedRightNow">
+      <span aria-hidden="true" class="text-lg">🚨</span> Being scammed right now? Tap here for immediate help
     </button>
   </div>
 
@@ -118,10 +118,11 @@
 
     <!-- ---------------- HOME TAB (new landing screen) ---------------- -->
     <section id="tabHome" class="tab-panel px-4 pt-4">
-      <h1 class="font-display font-bold text-2xl mb-1">What do you want to check?</h1>
-      <p class="text-sm text-neutral-400 mb-4">Pick a category — generic icons only, no official branding copied.</p>
+      <h1 class="font-display font-bold text-2xl mb-1" data-i18n="whatToCheck">What do you want to check?</h1>
+      <p class="text-sm text-neutral-400 mb-4" data-i18n="pickCategory">Pick a category — generic icons only, no official branding copied.</p>
 
       <div id="dashboardGrid" class="grid grid-cols-2 gap-3 mb-6"></div>
+      <div id="categoryInputPanel" hidden class="mb-6 rounded-2xl bg-panel border border-amber/30 p-4 transition-all"></div>
 
       <!-- Awareness gallery -->
       <h2 class="font-display font-bold text-lg mb-2">Awareness &amp; Resources</h2>
@@ -207,6 +208,14 @@
           <p id="resultRawContent" class="font-mono text-xs text-neutral-300 break-all"></p>
         </div>
 
+        <!-- UPI / payment QR summary — only shown when the decoded QR is a payment request -->
+        <div id="upiSummaryBlock" hidden class="mb-4 rounded-xl bg-ink border border-amber/30 p-3 space-y-1.5">
+          <p class="text-[10px] uppercase tracking-wide text-amber mb-1">Payment request details</p>
+          <p class="text-xs text-neutral-300"><span class="text-neutral-500">Receiver / Payee:</span> <span id="upiSummaryPayee" class="font-medium text-neutral-100"></span></p>
+          <p class="text-xs text-neutral-300"><span class="text-neutral-500">Amount:</span> <span id="upiSummaryAmount" class="font-medium text-neutral-100"></span></p>
+          <p class="text-xs text-neutral-300 break-all"><span class="text-neutral-500">UPI address:</span> <span id="upiSummaryVpa" class="font-mono text-neutral-100"></span></p>
+        </div>
+
         <!-- Source label — set to "[AI Analysis Result]" or "[Offline / Free Threat-Intel]" -->
         <p id="resultSourceLabel" class="text-[11px] font-mono uppercase tracking-wide text-neutral-500 mb-3"></p>
 
@@ -217,6 +226,12 @@
           Analyze with AI — deeper check, instant result
         </button>
         <p class="text-[11px] text-neutral-500 text-center mt-2">Free basic check always runs automatically. AI second opinion is optional and never delayed by ads.</p>
+
+        <!-- AI Safety Assistant chat prompt — shown under every scan verdict -->
+        <div class="qrv-ai-chat-prompt">
+          <p class="text-xs text-neutral-300 flex-1" data-i18n="askAiPrompt">Want to know how to avoid this scam? Ask our AI Assistant.</p>
+          <button id="btnAskAiSafety" type="button" data-i18n="chatWithAi">Chat with AI</button>
+        </div>
 
         <p class="text-[10px] leading-relaxed text-neutral-500 mt-4 pt-3 border-t border-line">
           <strong class="text-neutral-400">Important Disclaimer:</strong> This screening is based on signatures and automated metrics. AI outputs are experimental and can be incorrect. This platform does not take responsibility for financial losses, fraud, or damage. Always double-check and verify information directly via official government channels or authorities before taking any transaction decisions. Users act at their own individual discretion.
@@ -288,11 +303,11 @@
        POINT 9 / 15 — Bottom navigation
   ============================================================ -->
   <nav class="fixed bottom-0 left-0 right-0 max-w-[480px] mx-auto bg-panel border-t border-line grid grid-cols-5 z-30">
-    <button class="qrv-navbtn is-active" data-tab="tabHome"><span>🏠</span>Home</button>
-    <button class="qrv-navbtn" data-tab="tabScan"><span>🔍</span>Scan</button>
-    <button class="qrv-navbtn" data-tab="tabGenerate"><span>➕</span>Generate</button>
-    <button id="btnGenerateComplain" class="qrv-navbtn qrv-navbtn--complain"><span>🛡️⚖️</span>Complain<em>Official portal ↗</em></button>
-    <button id="btnOpenSettings" class="qrv-navbtn"><span>⚙️</span>Settings</button>
+    <button class="qrv-navbtn is-active" data-tab="tabHome"><span>🏠</span><span data-i18n="home">Home</span></button>
+    <button class="qrv-navbtn" data-tab="tabScan"><span>🔍</span><span data-i18n="scan">Scan</span></button>
+    <button class="qrv-navbtn" data-tab="tabGenerate"><span>➕</span><span data-i18n="generate">Generate</span></button>
+    <button id="btnGenerateComplain" class="qrv-navbtn qrv-navbtn--complain"><span>🛡️⚖️</span><span data-i18n="complain">Complain</span><em>Official portal ↗</em></button>
+    <button id="btnOpenSettings" class="qrv-navbtn"><span>⚙️</span><span data-i18n="settings">Settings</span></button>
   </nav>
 
   <!-- ============================================================
@@ -300,6 +315,10 @@
   ============================================================ -->
   <div id="settingsModal" hidden class="fixed inset-0 z-50 flex items-end justify-center bg-black/70">
     <div class="w-full max-w-[480px] bg-panel rounded-t-3xl p-6 border-t border-line">
+      <button id="btnSettingsHome" type="button" class="qrv-back-btn" aria-label="Back to home">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" class="w-4 h-4"><path d="M15 18l-6-6 6-6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        Back to Home
+      </button>
       <h2 class="font-display font-bold text-lg mb-4">Appearance</h2>
       <div class="grid grid-cols-3 gap-3 mb-6">
         <button class="qrv-theme-swatch" data-theme="dark">Dark</button>
@@ -324,7 +343,12 @@
       <div class="mt-4 rounded-xl bg-ink border border-line p-4">
         <p class="text-xs font-semibold text-neutral-300 mb-1">Revenue &amp; Growth Roadmap (transparency)</p>
         <p class="text-[11px] text-neutral-500 leading-relaxed">QRaksha is free today. To stay sustainable long-term, the roadmap may include: non-intrusive Google AdMob/AdSense placements, an optional premium tier (unlimited AI checks, ad-free), and B2B API licensing for other apps/institutions. Core safety features — offline QR check, Panic Mode, and basic scam detection — are intended to always remain free.</p>
+        <p class="text-[11px] text-amber leading-relaxed mt-2">We are actively working toward establishing direct API integrations and formal partnerships with Government Law Enforcement Authorities as soon as possible.</p>
       </div>
+
+      <button id="btnAboutHome" type="button" class="w-full mt-4 py-3 rounded-2xl border border-line text-sm flex items-center justify-center gap-2">
+        <span>🏠</span> Back to Home
+      </button>
     </div>
   </div>
 
@@ -333,11 +357,15 @@
   ============================================================ -->
   <div id="founderModal" role="dialog" aria-modal="true" hidden class="fixed inset-0 z-50 flex items-end justify-center bg-black/70">
     <div class="w-full max-w-[480px] max-h-[86vh] overflow-y-auto bg-panel rounded-t-3xl p-6 border-t border-line">
+      <button id="btnFounderHome" type="button" aria-label="Back to home" class="flex items-center gap-1.5 text-xs text-neutral-400 mb-4">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" class="w-4 h-4"><path d="M15 18l-6-6 6-6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        Back to Home
+      </button>
       <div class="flex items-center gap-4 mb-4">
         <img src="./assets/founder/imtiyaz.jpg" alt="Imtiyaz Surjapuri" class="w-16 h-16 rounded-full object-cover border border-line" onerror="this.style.display='none'">
         <div>
           <p class="font-display font-bold text-lg">Imtiyaz Surjapuri</p>
-          <p class="text-xs text-neutral-400">Founder, QRaksha</p>
+          <p class="text-xs text-neutral-400">Founder &amp; Developer, QRaksha</p>
         </div>
       </div>
 
@@ -345,10 +373,19 @@
       <div id="founderPortfolioGrid" class="grid grid-cols-2 gap-3 mb-5"></div>
 
       <h3 class="text-sm font-semibold text-neutral-300 mb-2">Connect</h3>
-      <div class="flex flex-wrap gap-2 mb-5">
-        <a href="https://facebook.com/ImtiyaSurjapuri" target="_blank" rel="noopener noreferrer" class="px-4 py-2 rounded-full border border-line text-xs text-neutral-200">Facebook</a>
-        <a href="https://instagram.com/ImtiyazSurjapuri" target="_blank" rel="noopener noreferrer" class="px-4 py-2 rounded-full border border-line text-xs text-neutral-200">Instagram</a>
-        <a href="https://x.com/Imtiyazkth" target="_blank" rel="noopener noreferrer" class="px-4 py-2 rounded-full border border-line text-xs text-neutral-200">X (@Imtiyazkth)</a>
+      <div class="flex flex-wrap gap-3 mb-5">
+        <a href="https://facebook.com/ImtiyaSurjapuri" target="_blank" rel="noopener noreferrer" aria-label="Facebook" class="qrv-social-icon" style="background:#0866FF">
+          <svg viewBox="0 0 24 24" fill="currentColor" class="w-5 h-5 text-white"><path d="M22 12.06C22 6.5 17.52 2 12 2S2 6.5 2 12.06c0 5 3.66 9.15 8.44 9.94v-7.03H7.9v-2.9h2.54V9.85c0-2.5 1.49-3.89 3.77-3.89 1.09 0 2.24.2 2.24.2v2.46h-1.26c-1.24 0-1.63.77-1.63 1.56v1.88h2.78l-.44 2.9h-2.34V22c4.78-.79 8.44-4.94 8.44-9.94z"/></svg>
+        </a>
+        <a href="https://instagram.com/ImtiyazSurjapuri" target="_blank" rel="noopener noreferrer" aria-label="Instagram" class="qrv-social-icon" style="background:radial-gradient(circle at 30% 110%, #fdf497 0%, #fd5949 45%, #d6249f 60%, #285AEB 90%)">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" class="w-5 h-5 text-white"><rect x="3" y="3" width="18" height="18" rx="5" stroke-width="1.8"/><circle cx="12" cy="12" r="4" stroke-width="1.8"/><circle cx="17.5" cy="6.5" r="1" fill="currentColor" stroke="none"/></svg>
+        </a>
+        <a href="https://x.com/Imtiyazkth" target="_blank" rel="noopener noreferrer" aria-label="X" class="qrv-social-icon" style="background:#000000">
+          <svg viewBox="0 0 24 24" fill="currentColor" class="w-4 h-4 text-white"><path d="M18.9 2H22l-7.6 8.7L23 22h-6.6l-5.2-6.8L5 22H1.9l8.1-9.3L1 2h6.8l4.7 6.3L18.9 2zm-1.2 18h1.8L7.4 4H5.5l12.2 16z"/></svg>
+        </a>
+        <a href="https://youtube.com/@imtiyazvedio" target="_blank" rel="noopener noreferrer" aria-label="YouTube" class="qrv-social-icon" style="background:#FF0000">
+          <svg viewBox="0 0 24 24" fill="currentColor" class="w-5 h-5 text-white"><path d="M23 12s0-3.6-.46-5.3a3 3 0 0 0-2.1-2.1C18.7 4 12 4 12 4s-6.7 0-8.44.6a3 3 0 0 0-2.1 2.1C1 8.4 1 12 1 12s0 3.6.46 5.3a3 3 0 0 0 2.1 2.1C5.3 20 12 20 12 20s6.7 0 8.44-.6a3 3 0 0 0 2.1-2.1C23 15.6 23 12 23 12z" stroke="none"/><path d="M10 15.5v-7l6 3.5-6 3.5z" fill="#FF0000" stroke="none"/></svg>
+        </a>
       </div>
 
       <button id="btnCloseFounder" type="button" class="w-full py-3 rounded-2xl border border-line text-sm">Close</button>
@@ -535,6 +572,7 @@
 <script src="js/ai-scam-check.js"></script>
 <script src="js/mobile-scanner.js"></script>
 <script src="js/dashboard.js"></script>
+<script type="module" src="js/firebase-init.js"></script>
 <script src="js/story-submit.js"></script>
 <script src="js/mobile-app.js"></script>
 </body>

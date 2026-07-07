@@ -25,7 +25,13 @@ window.QRVScanner = (function () {
     try {
       await html5QrCode.start(
         { facingMode: currentFacingMode },
-        { fps: 10, qrbox: fullScreenAspect ? undefined : { width: 240, height: 240 } },
+        {
+          fps: 15, // was 10 — faster decode loop for quicker detection
+          qrbox: fullScreenAspect ? undefined : { width: 260, height: 260 },
+          aspectRatio: 1.0,
+          disableFlip: false,
+          experimentalFeatures: { useBarCodeDetectorIfSupported: true }, // uses native BarcodeDetector API when the browser supports it — significantly faster and more accurate than the JS-only decoder
+        },
         onDecoded,
         () => {} // per-frame "no QR found yet" callback — intentionally silent
       );

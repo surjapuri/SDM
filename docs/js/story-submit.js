@@ -1,9 +1,11 @@
 /* ==========================================================================
    STORY-SUBMIT.JS
    Handles the success-story form end-to-end: client-side validation for
-   good UX, a real fetch to the submitStory Cloud Function (server-side
-   validation is the actual security boundary, not this file), and the
-   celebration/share modal on success.
+   good UX, then a direct write to Firestore's `success_stories` collection
+   via the Firebase Web SDK (see firebase-init.js) — no longer depends on
+   the submitStory Cloud Function, which was never deployed and blocked
+   every submission. Server-side enforcement now lives in firestore.rules
+   instead. Ends with the celebration/share modal on success.
    ========================================================================== */
 
 window.QRVStorySubmit = (function () {
@@ -106,27 +108,38 @@ window.QRVStorySubmit = (function () {
     btn.textContent = "Submitting\u2026";
 
     try {
-      const res = await fetch(`${window.QRVConfig.FUNCTIONS_BASE_URL}/submitStory`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-      let data = {};
-      try { data = await res.json(); } catch (e) { /* non-JSON error page, e.g. 404 */ }
-      if (!res.ok) {
-        // Surface the actual status so a broken deployment is diagnosable
-        // instead of always showing the same generic message.
-        showError(data.error || `Server returned an error (HTTP ${res.status}). If this keeps happening, the submitStory function may not be deployed yet.`);
-        return;
-      }
+      await waitForFirebase();
+      if (!window.QRVFirebase) throw new Error("firebase-unavailable");
+      await window.QRVFirebase.addSuccessStory(payload);
       closeForm();
       openCelebration();
     } catch (err) {
-      showError("Couldn't reach the server — check your connection, or the submitStory Cloud Function may not be deployed yet.");
+      if (err && err.message === "firebase-unavailable") {
+        showError("Story sharing isn't configured yet on this deployment (Firebase config missing). Your story was NOT lost — please try again in a moment, or contact the team.");
+      } else if (!navigator.onLine) {
+        showError("You're offline — please check your connection and try again. Your story hasn't been submitted yet.");
+      } else {
+        showError("Couldn't save your story right now. Please check your connection and try again in a moment.");
+      }
     } finally {
       btn.disabled = false;
       btn.textContent = "Submit";
     }
+  }
+
+  // firebase-init.js loads as an ES module and may still be initializing
+  // when the user hits Submit — wait briefly for the qrv:firebase-ready
+  // event rather than failing immediately on a fast connection.
+  function waitForFirebase(timeoutMs = 4000) {
+    if (window.QRVFirebase) return Promise.resolve();
+    return new Promise((resolve) => {
+      const onReady = () => { clearTimeout(timer); resolve(); };
+      const timer = setTimeout(() => {
+        window.removeEventListener("qrv:firebase-ready", onReady);
+        resolve(); // resolve anyway — the addSuccessStory call above will throw its own clear error
+      }, timeoutMs);
+      window.addEventListener("qrv:firebase-ready", onReady, { once: true });
+    });
   }
 
   /* ------------------------------------------------------------------

@@ -729,8 +729,36 @@
 
     if (parsed.type === "upi") {
       addFlag("info", 5, "Always check the payee name shown in your UPI app before approving any payment.");
+
+      const rawAmount = parseFloat((parsed.fields["Amount"] || "").replace(/[^0-9.]/g, "")) || 0;
+      const payeeName = (parsed.fields["Payee name"] || "").toLowerCase();
+      const vpa = (parsed.upiHandle || "").toLowerCase();
+      const note = (parsed.fields["Note"] || parsed.fields["Transaction note"] || "").toLowerCase();
+
       if (parsed.fields["Amount"] && parsed.fields["Amount"] !== "Not fixed (you'll be asked)") {
         addFlag("low", 5, "This QR requests a pre-filled amount — confirm it matches what you expect to pay.");
+      }
+
+      const DECEPTIVE_VPA_TERMS = ["refund", "support", "helpline", "help", "care", "customercare", "cashback", "kyc", "verify", "reward", "lottery", "prize"];
+      const vpaHit = DECEPTIVE_VPA_TERMS.filter((t) => vpa.includes(t));
+      if (vpaHit.length) {
+        addFlag("critical", 30, `The UPI address itself contains a deceptive term (${vpaHit.slice(0, 3).join(", ")}) — genuine businesses rarely use "support/refund/helpline" style handles for collecting payments.`);
+      }
+
+      const CARE_NAME_TERMS = ["customer care", "customercare", "support team", "helpdesk", "refund team", "verification"];
+      const nameHit = CARE_NAME_TERMS.some((t) => payeeName.includes(t));
+      if (nameHit && rawAmount >= 5000) {
+        addFlag("critical", 35, `Payee name looks like a generic support desk ("${parsed.fields["Payee name"]}") while requesting a high pre-filled amount (₹${rawAmount.toLocaleString("en-IN")}) — a common refund/KYC scam pattern.`);
+      } else if (nameHit) {
+        addFlag("high", 20, `Payee name looks like a generic support desk ("${parsed.fields["Payee name"]}") rather than a named individual or registered business.`);
+      } else if (rawAmount >= 20000) {
+        addFlag("medium", 10, `This QR pre-fills a large amount (₹${rawAmount.toLocaleString("en-IN")}). Confirm you initiated this payment yourself — legitimate refunds are never collected via a payment QR.`);
+      }
+
+      const URGENT_NOTE_TERMS = ["immediate kyc", "kyc verification", "blocked", "urgent", "suspend", "expire", "last warning", "account frozen", "reactivate"];
+      const noteHit = URGENT_NOTE_TERMS.filter((t) => note.includes(t));
+      if (noteHit.length) {
+        addFlag("critical", 30, `The transaction note uses urgency/panic language ("${noteHit[0]}") — a hallmark of KYC-update and account-block scams. No genuine bank or company collects money to "unblock" or "verify" an account via a UPI QR.`);
       }
     }
 

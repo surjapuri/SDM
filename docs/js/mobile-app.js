@@ -86,13 +86,52 @@
     toastTimer = setTimeout(() => { el.hidden = true; }, 3200);
 
     if (level === "critical" || level === "high" || level === "medium") playTutTutSound();
+    else playSuccessChime();
   }
+
+  function playSuccessChime() {
+    try {
+      const ctx = getAudioCtx();
+      if (!ctx) return;
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = "sine";
+      osc.frequency.value = 1200;
+      gain.gain.setValueAtTime(0.12, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.12);
+      osc.connect(gain).connect(ctx.destination);
+      osc.start(ctx.currentTime);
+      osc.stop(ctx.currentTime + 0.13);
+    } catch (e) { /* never block the UI for audio */ }
+  }
+
+  /* ------------------------------------------------------------------
+     Shared AudioContext singleton. Mobile browsers (esp. iOS Safari)
+     suspend new AudioContexts until a user gesture calls .resume() on
+     them — creating a *new* context per beep (the old approach) meant
+     every single beep after the first risked being silently dropped.
+     We create one context lazily and unlock/resume it on the very
+     first tap anywhere in the app, then reuse it for every beep.
+  ------------------------------------------------------------------ */
+  let sharedAudioCtx = null;
+  function getAudioCtx() {
+    if (!sharedAudioCtx) {
+      const Ctx = window.AudioContext || window.webkitAudioContext;
+      if (!Ctx) return null;
+      sharedAudioCtx = new Ctx();
+    }
+    if (sharedAudioCtx.state === "suspended") {
+      sharedAudioCtx.resume().catch(() => {});
+    }
+    return sharedAudioCtx;
+  }
+  document.addEventListener("touchstart", () => getAudioCtx(), { once: true, passive: true });
+  document.addEventListener("click", () => getAudioCtx(), { once: true });
 
   function playTutTutSound() {
     try {
-      const Ctx = window.AudioContext || window.webkitAudioContext;
-      if (!Ctx) return;
-      const ctx = new Ctx();
+      const ctx = getAudioCtx();
+      if (!ctx) return;
       const beep = (startTime) => {
         const osc = ctx.createOscillator();
         const gain = ctx.createGain();
@@ -122,6 +161,19 @@
     setText($("resultRawContent"), parsed.raw != null ? String(parsed.raw) : "(no content decoded)");
     setText($("resultSourceLabel"), "[Offline / Free Threat-Intel Analysis]");
 
+    // UPI / payment QR summary — Merchant name, amount, raw VPA
+    const upiBlock = $("upiSummaryBlock");
+    if (upiBlock) {
+      if (parsed.type === "upi") {
+        upiBlock.hidden = false;
+        setText($("upiSummaryPayee"), parsed.upiPayeeName || parsed.fields["Payee name"] || "Not specified in QR");
+        setText($("upiSummaryAmount"), parsed.upiAmount ? `\u20b9${Number(parsed.upiAmount).toLocaleString("en-IN")}` : "Not fixed — you'll be asked to enter it");
+        setText($("upiSummaryVpa"), parsed.upiHandle || "Not found");
+      } else {
+        upiBlock.hidden = true;
+      }
+    }
+
     const pct = risk.score;
     const circumference = 2 * Math.PI * 27;
     const offset = circumference * (1 - pct / 100);
@@ -131,8 +183,11 @@
     const color = pct >= 80 ? "#EF4444" : pct >= 55 ? "#F5A524" : pct >= 25 ? "#F5A524" : "#22C55E";
     circle.setAttribute("stroke", color);
     setText($("riskMeterNumber"), `${pct}%`);
-    setText($("riskMeterLabel"), risk.level === "critical" ? "Confirmed Risk"
-      : risk.level === "high" ? "High Risk" : risk.level === "medium" ? "Suspicious" : "Low Risk");
+    const L = window.QRVLang;
+    setText($("riskMeterLabel"), risk.level === "critical" ? (L ? L.t("confirmedRisk") : "Confirmed Risk")
+      : risk.level === "high" ? (L ? L.t("highRisk") : "High Risk")
+      : risk.level === "medium" ? (L ? L.t("suspicious") : "Suspicious")
+      : (L ? L.t("lowRisk") : "Low Risk"));
 
     const flagsEl = $("offlineFlagsList");
     flagsEl.innerHTML = "";
@@ -163,6 +218,24 @@
       activateTab("tabMessage"); // AI result renders into the shared message-report UI
     });
   });
+
+  /* ------------------------------------------------------------------
+     "Chat with AI" safety-assistant prompt shown under every scan verdict.
+     Reuses the existing message-check + consent pipeline rather than a
+     separate chat backend — pre-fills the question with the decoded
+     QR content so the AI's advice is contextual.
+  ------------------------------------------------------------------ */
+  if ($("btnAskAiSafety")) {
+    $("btnAskAiSafety").addEventListener("click", () => {
+      const question = `How can I avoid falling for a scam like this QR code?\n\nDecoded content: ${lastDecodedText || "(none)"}`;
+      activateTab("tabMessage");
+      const msgInput = $("msgTextInput");
+      if (msgInput) msgInput.value = question;
+      window.QRVConsent.requireConsent(async () => {
+        await window.QRVAiScamCheck.runMessageCheck(question);
+      });
+    });
+  }
 
   /* ------------------------------------------------------------------
      Message/Screenshot check tab wiring (unchanged behavior)
@@ -360,6 +433,18 @@
     if (completed) $("settingsModal").hidden = false;
   });
   $("btnCloseSettings").addEventListener("click", () => { $("settingsModal").hidden = true; });
+  if ($("btnSettingsHome")) {
+    $("btnSettingsHome").addEventListener("click", () => {
+      $("settingsModal").hidden = true;
+      activateTab("tabHome");
+    });
+  }
+  if ($("btnAboutHome")) {
+    $("btnAboutHome").addEventListener("click", () => {
+      $("settingsModal").hidden = true;
+      activateTab("tabHome");
+    });
+  }
 
   document.querySelectorAll(".qrv-theme-swatch[data-theme]").forEach((btn) => {
     btn.addEventListener("click", () => {
@@ -383,10 +468,10 @@
      About Founder — portfolio grid + modal wiring
   ------------------------------------------------------------------ */
   const FOUNDER_PORTFOLIO = [
-    { projectName: "OneSearch", projectLink: "https://imtiyazkth.github.io/onesearch/" },
-    { projectName: "PrompterPro", projectLink: "https://github.com/imtiyazkth" },
-    { projectName: "SM 10X", projectLink: "https://github.com/imtiyazkth" },
-    { projectName: "School Management System", projectLink: "https://github.com/imtiyazkth" },
+    { projectName: "QRVerify", tagline: "QR scanner & studio", projectLink: "https://imtiyazkth.github.io/QRVerify/" },
+    { projectName: "TeleprompterPro", tagline: "On-screen teleprompter", projectLink: "https://imtiyazkth.github.io/Teleprompter/" },
+    { projectName: "SM 10X", tagline: "Private messaging", projectLink: "https://github.com/imtiyazkth" },
+    { projectName: "School Management System", tagline: "Institution admin", projectLink: "https://github.com/imtiyazkth" },
   ];
 
   function renderFounderPortfolio() {
@@ -398,8 +483,12 @@
       a.href = p.projectLink;
       a.target = "_blank";
       a.rel = "noopener noreferrer";
-      a.className = "rounded-xl bg-ink border border-line p-3 text-xs text-neutral-200 text-center";
-      a.textContent = p.projectName;
+      a.className = "qrv-portfolio-card group flex flex-col justify-between rounded-2xl bg-gradient-to-br from-ink to-panel border border-line p-4 min-h-[92px] shadow-md hover:border-amber/50 hover:shadow-amber/10 transition";
+      a.innerHTML = `
+        <span class="flex items-center justify-center w-9 h-9 rounded-lg bg-amber/10 text-amber font-display font-bold text-sm mb-2">${p.projectName.charAt(0)}</span>
+        <span class="font-display font-semibold text-sm text-neutral-100 leading-tight">${p.projectName}</span>
+        <span class="text-[11px] text-neutral-500 mt-0.5">${p.tagline}</span>
+      `;
       grid.appendChild(a);
     });
   }
@@ -407,6 +496,13 @@
   if ($("btnOpenFounder")) {
     $("btnOpenFounder").addEventListener("click", () => { $("founderModal").hidden = false; });
     $("btnCloseFounder").addEventListener("click", () => { $("founderModal").hidden = true; });
+    if ($("btnFounderHome")) {
+      $("btnFounderHome").addEventListener("click", () => {
+        $("founderModal").hidden = true;
+        $("settingsModal").hidden = true;
+        activateTab("tabHome");
+      });
+    }
     renderFounderPortfolio();
   }
   if ($("btnOpenPrivacy")) {
