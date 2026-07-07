@@ -4,6 +4,10 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>QRaksha — Scan with Privacy</title>
+<link rel="manifest" href="./manifest.json">
+<meta name="theme-color" content="#0B0E11">
+<link rel="icon" href="./icons/icon-192.png">
+<link rel="apple-touch-icon" href="./icons/icon-192.png">
 <meta name="description" content="QRaksha scans QR codes, messages, and screenshots to catch scams before you fall for them.">
 
 <script src="https://cdn.tailwindcss.com"></script>
@@ -575,5 +579,12 @@
 <script type="module" src="js/firebase-init.js"></script>
 <script src="js/story-submit.js"></script>
 <script src="js/mobile-app.js"></script>
+<script>
+  if ("serviceWorker" in navigator) {
+    window.addEventListener("load", () => {
+      navigator.serviceWorker.register("./sw.js").catch(() => {});
+    });
+  }
+</script>
 </body>
 </html>
