@@ -579,3 +579,38 @@ a:focus-visible, button:focus-visible, input:focus-visible, [tabindex]:focus-vis
   font-size: 12px; color: var(--text-muted, #9CA3AF);
   padding: 6px 0; margin-bottom: 8px; background: none; border: none;
 }
+/* ==========================================================================
+   QRaksha Premium Emergency & Founder Typography Custom Additions
+   ========================================================================== */
+
+/* 1. Aggressive Pulse Glow Animation for Critical Panic Alerts */
+@keyframes pulse-glow {
+    0%, 100% { 
+        opacity: 1; 
+        transform: scale(1); 
+        box-shadow: 0 0 15px rgba(239, 68, 68, 0.6); 
+    }
+    50% { 
+        opacity: 0.92; 
+        transform: scale(0.995); 
+        box-shadow: 0 0 28px rgba(239, 68, 68, 0.9); 
+    }
+}
+
+.animate-pulse-glow {
+    animation: pulse-glow 1.8s infinite ease-in-out;
+}
+
+/* 2. Responsive Viewport Scrolling Wrapping Fixes */
+.overflow-y-auto {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(239, 68, 68, 0.4) transparent;
+}
+
+/* 3. Text Gradient Custom Utility (Fallback for older browser rendering) */
+.bg-clip-text {
+    -webkit-background-clip: text;
+    background-clip: text;
+}
+
+

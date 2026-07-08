@@ -104,15 +104,14 @@
   <!-- ============================================================
        POINT 2 — Scan Alert Banner (Panic Mode trigger)
   ============================================================ -->
-  <div class="sticky top-0 z-40 qrv-flash-banner border-b border-danger/40 backdrop-blur w-full">
-    <button id="btnOpenPanicMode" type="button"
-            class="w-full max-w-4xl mx-auto flex items-center justify-center gap-2 py-3 px-4
-                   text-xs sm:text-sm font-black text-white tracking-wide animate-pulse leading-snug"
-            data-i18n="scammedRightNow">
-      <span aria-hidden="true" class="text-lg flex-shrink-0">🚨</span>
-      <span>Being scammed right now? Tap here for immediate help</span>
+<!-- QRaksha Hyper-Visible Emergency Panic Container -->
+<div class="sticky top-0 z-50 w-full bg-gradient-to-r from-red-800 via-red-600 to-red-800 shadow-[0_4px_20px_rgba(239,68,68,0.4)]">
+    <button id="btnOpenPanicMode" type="button" class="w-full max-w-4xl mx-auto flex items-center justify-center gap-2 py-3 px-4 font-black tracking-wide text-white animate-pulse text-xs sm:text-sm uppercase" data-i18n="scannedRightNow">
+        <span aria-hidden="true" class="text-lg flex-shrink-0">🚨</span>
+        <span id="panic-banner-text">Being scammed right now? Tap here for immediate help / क्या आपके साथ अभी धोखाधड़ी हो रही है? तुरंत मदद के लिए यहाँ टैप करें</span>
     </button>
-  </div>
+</div>
+
 
   <!-- Inline banner ad slot — top view, non-blocking, never covers safety UI -->
   <div id="topBannerAdSlot" class="w-full h-[50px] flex items-center justify-center text-[11px] uppercase tracking-wide text-neutral-500 bg-panel border-b border-line">
@@ -370,12 +369,20 @@
         Back to Home
       </button>
       <div class="flex items-center gap-4 mb-4">
-        <img src="./assets/founder/imtiyaz.jpg" alt="Imtiyaz Surjapuri" class="w-16 h-16 rounded-full object-cover border border-line" onerror="this.style.display='none'">
-        <div>
-          <p class="font-display font-bold text-lg">Imtiyaz Surjapuri</p>
-          <p class="text-xs text-neutral-400">Founder &amp; Developer, QRaksha</p>
-        </div>
-      </div>
+        <<!-- Premium Founder Typography Block -->
+<div class="mt-4 text-center sm:text-left">
+    <h3 class="text-2xl sm:text-3xl font-extrabold tracking-tight bg-gradient-to-r from-white via-neutral-200 to-neutral-400 bg-clip-text text-transparent font-sans">
+        Imtiyaz Surjapuri
+    </h3>
+    <div class="mt-1.5 flex flex-wrap items-center gap-2 justify-center sm:justify-start">
+        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-red-500/10 text-red-400 border border-red-500/20 tracking-wide uppercase">
+            Founder
+        </span>
+        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-neutral-800 text-neutral-300 border border-neutral-700 tracking-wide uppercase">
+            Lead Developer
+        </span>
+    </div>
+</div> 
 
       <h3 class="text-sm font-semibold text-neutral-300 mb-2">Other Projects</h3>
       <div id="founderPortfolioGrid" class="grid grid-cols-2 gap-3 mb-5"></div>
