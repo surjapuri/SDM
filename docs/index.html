@@ -1,801 +1,620 @@
-<!DOCTYPE html>
-<html lang="en" dir="ltr">
+<!doctype html>
+<html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta http-equiv="X-UA-Compatible" content="IE=edge" />
-  <title>OneSearch — Search Everything, Everywhere</title>
-  <meta name="description" content="Privacy-first personal search engine. Search Drive, Gmail, Photos, Sheets and local files from one place." />
-  <meta name="robots" content="index, follow" />
-  <meta name="theme-color" content="#0d0d16" />
-  <meta property="og:type" content="website" />
-  <meta property="og:title" content="OneSearch" />
-  <meta property="og:description" content="One search bar. Every account. Every file. All private." />
-  <link rel="canonical" href="/" />
-  <link rel="icon" type="image/svg+xml" href="favicon.svg" />
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="style.css" />
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>QRaksha — Scan with Privacy</title>
+<link rel="manifest" href="./manifest.json">
+<meta name="theme-color" content="#0B0E11">
+<link rel="icon" href="./icons/icon-192.png">
+<link rel="apple-touch-icon" href="./icons/icon-192.png">
+<meta name="description" content="QRaksha scans QR codes, messages, and screenshots to catch scams before you fall for them.">
+
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@600&display=swap" rel="stylesheet">
+
+<script>
+  tailwind.config = {
+    theme: {
+      extend: {
+        colors: {
+          ink: "#0B0E11",
+          panel: "#12161B",
+          line: "#232A31",
+          amber: "#FFB020",
+          safe: "#22C55E",
+          warn: "#F5A524",
+          danger: "#EF4444",
+        },
+        fontFamily: {
+          display: ["'Space Grotesk'", "sans-serif"],
+          body: ["Inter", "sans-serif"],
+          mono: ["'JetBrains Mono'", "monospace"],
+        },
+      },
+    },
+  };
+</script>
+
+<style>
+  /* Things Tailwind's utility classes can't express cleanly: the scan
+     laser animation and corner brackets — the one deliberate "signature"
+     visual moment of this redesign. */
+  @keyframes scanLaser {
+    0%   { top: 8%; opacity: 0; }
+    10%  { opacity: 1; }
+    90%  { opacity: 1; }
+    100% { top: 88%; opacity: 0; }
+  }
+  .scan-laser {
+    position: absolute; left: 6%; right: 6%; height: 2px;
+    background: linear-gradient(90deg, transparent, #FFB020 20%, #FFB020 80%, transparent);
+    box-shadow: 0 0 12px 2px rgba(255,176,32,0.6);
+    animation: scanLaser 2.6s ease-in-out infinite;
+  }
+  .scan-corner { position: absolute; width: 28px; height: 28px; border: 3px solid #22C55E; }
+  .scan-corner--tl { top: 8%; left: 6%; border-right: none; border-bottom: none; border-radius: 6px 0 0 0; }
+  .scan-corner--tr { top: 8%; right: 6%; border-left: none; border-bottom: none; border-radius: 0 6px 0 0; }
+  .scan-corner--bl { bottom: 12%; left: 6%; border-right: none; border-top: none; border-radius: 0 0 0 6px; }
+  .scan-corner--br { bottom: 12%; right: 6%; border-left: none; border-top: none; border-radius: 0 0 6px 0; }
+  @media (prefers-reduced-motion: reduce) { .scan-laser { animation: none; top: 50%; } }
+
+  #scanViewport video { width: 100%; height: 100%; object-fit: cover; }
+  .qrv-viewport--boxed { aspect-ratio: 1 / 1 !important; max-width: 82%; margin: 0 auto; border-radius: 20px; overflow: hidden; }
+
+  /* --------------------------------------------------------------------
+     THEME SYSTEM (fixed)
+     Root cause of "no theme button works": this used to be
+     `[data-theme="light"] body {...}` which can never match — body is
+     the ANCESTOR of #appWrapper, not its descendant, so that selector
+     never selects anything. `data-theme` now lives on <body> itself, and
+     every rule below is scoped from there. Accent color drives every
+     "amber" utility class through a single CSS variable so the Custom
+     picker can actually change something.
+  -------------------------------------------------------------------- */
+  :root { --qrv-accent: #FFB020; --qrv-accent-ink: #14181D; }
+  .bg-amber { background-color: var(--qrv-accent) !important; }
+  .text-amber { color: var(--qrv-accent) !important; }
+  .border-amber { border-color: var(--qrv-accent) !important; }
+  .accent-amber { accent-color: var(--qrv-accent) !important; }
+  .qrv-navbtn.is-active { color: var(--qrv-accent) !important; }
+
+  body[data-theme="light"] { color-scheme: light; background:#F4F5F7 !important; color:#14181D !important; }
+  body[data-theme="light"] .bg-ink { background-color:#F4F5F7 !important; }
+  body[data-theme="light"] .bg-panel { background-color:#FFFFFF !important; }
+  body[data-theme="light"] .border-line { border-color:#E1E5EA !important; }
+  body[data-theme="light"] .text-neutral-100,
+  body[data-theme="light"] .text-neutral-200 { color:#14181D !important; }
+  body[data-theme="light"] .text-neutral-300,
+  body[data-theme="light"] .text-neutral-400 { color:#4B5563 !important; }
+  body[data-theme="light"] .text-neutral-500 { color:#6B7280 !important; }
+  body[data-theme="light"] .bg-black\/60,
+  body[data-theme="light"] .bg-black\/70,
+  body[data-theme="light"] .bg-black\/80,
+  body[data-theme="light"] .bg-black\/90 { background-color:rgba(20,24,29,0.75) !important; }
+</style>
+<style>[hidden]{display:none !important;}</style>
 </head>
-<body class="app-body" data-theme="dark">
 
-<!-- ═══════════════════════════════════════════════════════════
-     LOADING SCREEN
-══════════════════════════════════════════════════════════════ -->
-<div id="loading-screen" class="loading-screen" role="status" aria-live="polite">
-  <div class="loading-screen__inner">
-    <div class="loading-screen__logo" aria-hidden="true">
-      <span class="logo-mark">◎</span>
-      <span class="logo-text">OneSearch</span>
-    </div>
-    <div class="loading-screen__bar" aria-hidden="true">
-      <div class="loading-screen__bar-fill" id="loading-bar-fill"></div>
-    </div>
-    <p class="loading-screen__status" id="loading-status-text">Initialising…</p>
+<body class="bg-ink text-neutral-100 font-body antialiased" data-theme="dark">
+
+<div id="appWrapper" class="max-w-[480px] mx-auto min-h-screen flex flex-col relative shadow-2xl">
+
+  <!-- ============================================================
+       POINT 2 — Scan Alert Banner (Panic Mode trigger)
+  ============================================================ -->
+  <div class="sticky top-0 z-40 qrv-flash-banner border-b border-danger/40 backdrop-blur w-full">
+    <button id="btnOpenPanicMode" type="button"
+            class="w-full max-w-4xl mx-auto flex items-center justify-center gap-2 py-3 px-4
+                   text-xs sm:text-sm font-black text-white tracking-wide animate-pulse leading-snug"
+            data-i18n="scammedRightNow">
+      <span aria-hidden="true" class="text-lg flex-shrink-0">🚨</span>
+      <span>Being scammed right now? Tap here for immediate help</span>
+    </button>
   </div>
-</div>
 
-<!-- ═══════════════════════════════════════════════════════════
-     TOAST CONTAINER
-══════════════════════════════════════════════════════════════ -->
-<div id="toast-container" class="toast-container" role="region" aria-label="Notifications" aria-live="polite" aria-atomic="false"></div>
+  <!-- Inline banner ad slot — top view, non-blocking, never covers safety UI -->
+  <div id="topBannerAdSlot" class="w-full h-[50px] flex items-center justify-center text-[11px] uppercase tracking-wide text-neutral-500 bg-panel border-b border-line">
+    Ad slot — banner (sticky, non-intrusive)
+  </div>
 
-<!-- ═══════════════════════════════════════════════════════════
-     MODAL
-══════════════════════════════════════════════════════════════ -->
-<div id="modal-container" class="modal-container" role="dialog" aria-modal="true" aria-labelledby="modal-title" aria-describedby="modal-body" hidden>
-  <div class="modal-overlay" id="modal-overlay" tabindex="-1"></div>
-  <div class="modal" id="modal">
-    <header class="modal__header">
-      <h2 class="modal__title" id="modal-title">Modal</h2>
-      <button class="modal__close btn-icon" id="modal-close-btn" aria-label="Close" type="button">
-        <svg aria-hidden="true" viewBox="0 0 24 24" width="18" height="18"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+  <!-- ============================================================
+       MAIN TAB PANELS
+  ============================================================ -->
+  <main class="flex-1 overflow-y-auto pb-24">
+
+    <!-- ---------------- HOME TAB (new landing screen) ---------------- -->
+    <section id="tabHome" class="tab-panel px-4 pt-4">
+      <h1 class="font-display font-bold text-2xl mb-1" data-i18n="whatToCheck">What do you want to check?</h1>
+      <p class="text-sm text-neutral-400 mb-4" data-i18n="pickCategory">Pick a category — generic icons only, no official branding copied.</p>
+
+      <div id="dashboardGrid" class="grid grid-cols-2 gap-3 mb-6"></div>
+      <div id="categoryInputPanel" hidden class="mb-6 rounded-2xl bg-panel border border-amber/30 p-4 transition-all"></div>
+
+      <!-- Awareness gallery -->
+      <h2 class="font-display font-bold text-lg mb-2">Awareness &amp; Resources</h2>
+      <div id="awarenessGallery" class="flex gap-3 overflow-x-auto pb-2 mb-6 snap-x"></div>
+
+      <!-- Complaint router -->
+      <h2 class="font-display font-bold text-lg mb-2">Report Directly to a Platform</h2>
+      <p class="text-xs text-neutral-500 mb-3">Links go straight to each platform's own official report page — QRaksha does not process these reports itself.</p>
+      <div id="platformReportGrid" class="grid grid-cols-3 gap-2 mb-4"></div>
+
+      <!-- Success story CTA -->
+      <div class="rounded-2xl bg-panel border border-amber/30 p-4 mb-4">
+        <h2 class="font-display font-bold text-lg mb-1">Aapki Kahani, Cyber Suraksha ki Zubani</h2>
+        <p class="text-xs text-neutral-400 mb-3">Agar aap hamare app ka istemal karke kisi dhokhadhadi ya fraud se bache hain, toh apni kahani hamare sath saja karein. Aapki kahani social media aur public awareness ke liye share ki jayegi.</p>
+        <button id="btnOpenStoryForm" type="button" class="w-full py-2.5 rounded-xl bg-amber text-ink text-sm font-semibold">Share Your Success Story</button>
+      </div>
+    </section>
+
+    <!-- ---------------- SCAN TAB ---------------- -->
+    <section id="tabScan" class="tab-panel px-4 pt-4" hidden>
+      <div class="relative rounded-3xl overflow-hidden bg-panel border border-line" style="aspect-ratio:3/4;">
+        <!-- Point 3 — Privacy badge -->
+        <div class="absolute top-3 left-1/2 -translate-x-1/2 z-20 flex items-center gap-1.5 bg-black/60 backdrop-blur px-3 py-1.5 rounded-full text-xs font-medium text-neutral-100 border border-white/10">
+          <span aria-hidden="true">🔒</span> <span data-i18n="scanPrivacy">Scan with privacy</span>
+        </div>
+
+        <!-- Point 4 — Active scanning viewport -->
+        <div id="scanViewport" class="absolute inset-0 bg-black"></div>
+        <div class="scan-laser" aria-hidden="true"></div>
+        <div class="scan-corner scan-corner--tl" aria-hidden="true"></div>
+        <div class="scan-corner scan-corner--tr" aria-hidden="true"></div>
+        <div class="scan-corner scan-corner--bl" aria-hidden="true"></div>
+        <div class="scan-corner scan-corner--br" aria-hidden="true"></div>
+
+        <!-- Point 5 / 6 / 7 — Torch, camera switch, aspect toggle -->
+        <div class="absolute top-3 right-3 z-20 flex flex-col gap-2">
+          <button id="btnTorch" type="button" hidden class="w-10 h-10 rounded-full bg-black/60 border border-white/10 flex items-center justify-center text-lg backdrop-blur">🔦</button>
+          <button id="btnSwitchCamera" type="button" class="w-10 h-10 rounded-full bg-black/60 border border-white/10 flex items-center justify-center text-lg backdrop-blur">🔄</button>
+          <button id="btnAspectToggle" type="button" class="w-10 h-10 rounded-full bg-black/60 border border-white/10 flex items-center justify-center text-lg backdrop-blur">⬚</button>
+        </div>
+
+        <!-- Point 8 — Media upload -->
+        <label for="uploadInput" class="absolute bottom-3 left-3 z-20 w-11 h-11 rounded-full bg-amber text-ink flex items-center justify-center text-xl shadow-lg cursor-pointer">
+          🖼️
+          <input type="file" id="uploadInput" accept="image/*" hidden>
+        </label>
+
+        <!-- Point 10 — Digital zoom -->
+        <input type="range" id="zoomSlider" min="1" max="3" step="0.1" value="1" aria-label="Zoom"
+          class="absolute bottom-4 right-4 z-20 w-28 accent-amber">
+      </div>
+
+      <p id="scanStatusText" class="text-center text-sm text-neutral-400 mt-3">Point your camera at a QR code, or upload an image.</p>
+
+      <button id="btnGoMessageCheck" type="button" class="w-full mt-4 py-3 rounded-2xl border border-line bg-panel text-sm font-medium text-neutral-200">
+        Got a suspicious message instead? Check it here →
       </button>
-    </header>
-    <div class="modal__body" id="modal-body"></div>
-    <footer class="modal__footer" id="modal-footer">
-      <button class="btn btn--secondary" id="modal-cancel-btn" type="button">Cancel</button>
-      <button class="btn btn--primary"   id="modal-confirm-btn" type="button">Confirm</button>
-    </footer>
+
+      <!-- ============================================================
+           DUAL-ROUTE SCAN RESULT (Section 2)
+      ============================================================ -->
+      <div id="resultCard" hidden class="mt-4 rounded-3xl bg-panel border border-line p-5">
+        <p class="text-xs uppercase tracking-wide text-neutral-500 mb-1">What this is</p>
+        <p id="resultContext" class="text-base font-medium text-neutral-100 mb-4"></p>
+
+        <div class="flex items-center gap-4 mb-4">
+          <div class="relative w-16 h-16 shrink-0">
+            <svg viewBox="0 0 64 64" class="w-16 h-16 -rotate-90">
+              <circle cx="32" cy="32" r="27" fill="none" stroke="#232A31" stroke-width="6"/>
+              <circle id="riskMeterCircle" cx="32" cy="32" r="27" fill="none" stroke="#22C55E" stroke-width="6" stroke-linecap="round"/>
+            </svg>
+            <span id="riskMeterNumber" class="absolute inset-0 flex items-center justify-center font-mono text-sm font-semibold">0%</span>
+          </div>
+          <div>
+            <p id="riskMeterLabel" class="font-display font-bold text-lg">Low Risk</p>
+            <p id="historicalAudit" class="text-xs text-neutral-400"></p>
+          </div>
+        </div>
+
+        <!-- Raw content transparency — always shown, exactly as decoded -->
+        <div class="mb-4 rounded-xl bg-ink border border-line p-3">
+          <p class="text-[10px] uppercase tracking-wide text-neutral-500 mb-1">Exact decoded content</p>
+          <p id="resultRawContent" class="font-mono text-xs text-neutral-300 break-all"></p>
+        </div>
+
+        <!-- UPI / payment QR summary — only shown when the decoded QR is a payment request -->
+        <div id="upiSummaryBlock" hidden class="mb-4 rounded-xl bg-ink border border-amber/30 p-3 space-y-1.5">
+          <p class="text-[10px] uppercase tracking-wide text-amber mb-1">Payment request details</p>
+          <p class="text-xs text-neutral-300"><span class="text-neutral-500">Receiver / Payee:</span> <span id="upiSummaryPayee" class="font-medium text-neutral-100"></span></p>
+          <p class="text-xs text-neutral-300"><span class="text-neutral-500">Amount:</span> <span id="upiSummaryAmount" class="font-medium text-neutral-100"></span></p>
+          <p class="text-xs text-neutral-300 break-all"><span class="text-neutral-500">UPI address:</span> <span id="upiSummaryVpa" class="font-mono text-neutral-100"></span></p>
+        </div>
+
+        <!-- Source label — set to "[AI Analysis Result]" or "[Offline / Free Threat-Intel]" -->
+        <p id="resultSourceLabel" class="text-[11px] font-mono uppercase tracking-wide text-neutral-500 mb-3"></p>
+
+        <div id="offlineFlagsList" class="space-y-2 mb-4"></div>
+
+        <!-- Route B — Advanced AI analysis. Deliberately NOT ad-gated. -->
+        <button id="btnAnalyzeAI" type="button" class="w-full py-3 rounded-2xl bg-amber text-ink font-semibold text-sm">
+          Analyze with AI — deeper check, instant result
+        </button>
+        <p class="text-[11px] text-neutral-500 text-center mt-2">Free basic check always runs automatically. AI second opinion is optional and never delayed by ads.</p>
+
+        <!-- AI Safety Assistant chat prompt — shown under every scan verdict -->
+        <div class="qrv-ai-chat-prompt">
+          <p class="text-xs text-neutral-300 flex-1" data-i18n="askAiPrompt">Want to know how to avoid this scam? Ask our AI Assistant.</p>
+          <button id="btnAskAiSafety" type="button" data-i18n="chatWithAi">Chat with AI</button>
+        </div>
+
+        <p class="text-[10px] leading-relaxed text-neutral-500 mt-4 pt-3 border-t border-line">
+          <strong class="text-neutral-400">Important Disclaimer:</strong> This screening is based on signatures and automated metrics. AI outputs are experimental and can be incorrect. This platform does not take responsibility for financial losses, fraud, or damage. Always double-check and verify information directly via official government channels or authorities before taking any transaction decisions. Users act at their own individual discretion.
+        </p>
+      </div>
+    </section>
+
+    <!-- ---------------- MESSAGE / SCREENSHOT CHECK TAB ---------------- -->
+    <section id="tabMessage" class="tab-panel px-4 pt-4" hidden>
+      <h2 class="font-display font-bold text-xl mb-1">Message &amp; Screenshot Check</h2>
+      <p class="text-sm text-neutral-400 mb-4">Paste a suspicious message or upload a screenshot.</p>
+
+      <div class="flex rounded-xl overflow-hidden border border-line mb-3">
+        <button id="msgTabText" class="flex-1 py-2 text-sm font-medium bg-amber text-ink">Paste Message</button>
+        <button id="msgTabImage" class="flex-1 py-2 text-sm font-medium bg-panel text-neutral-300">Upload Screenshot</button>
+      </div>
+
+      <div id="msgPanelText">
+        <textarea id="msgTextInput" maxlength="2000" rows="5" placeholder="Paste the suspicious SMS / WhatsApp message here…"
+          class="w-full rounded-2xl bg-panel border border-line p-4 text-sm text-neutral-100 placeholder:text-neutral-500"></textarea>
+      </div>
+      <div id="msgPanelImage" hidden>
+        <label for="msgFileInput" class="flex flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-line py-10 text-neutral-400 text-sm cursor-pointer">
+          <span class="text-2xl" aria-hidden="true">⬆️</span> Tap to upload a screenshot
+          <input type="file" id="msgFileInput" accept="image/png,image/jpeg,image/webp" hidden>
+        </label>
+        <p id="msgFileName" class="text-center text-xs text-neutral-500 mt-2"></p>
+      </div>
+
+      <button id="btnCheckMessage" type="button" data-i18n="checkForScam" class="w-full mt-4 py-3 rounded-2xl bg-amber text-ink font-semibold text-sm">Check for scam</button>
+      <p id="aiUnavailableBanner" hidden class="mt-3 text-xs text-warn bg-warn/10 border border-warn/30 rounded-xl p-3">AI second opinion is currently unavailable — showing offline + open threat-intel analysis only.</p>
+
+      <div id="msgReportSection" hidden class="mt-4 rounded-3xl bg-panel border border-line p-5">
+        <p id="msgSourceHeading" class="text-xs uppercase tracking-wide text-neutral-500 mb-1"></p>
+        <p id="msgExplanation" class="text-sm text-neutral-100 mb-3"></p>
+        <div id="msgRiskFlags" class="space-y-2 mb-3"></div>
+        <button id="btnAiSecondOpinionMsg" type="button" hidden class="w-full py-2.5 rounded-xl border border-amber text-amber text-sm font-medium">Get AI second opinion</button>
+        <p class="text-[10px] leading-relaxed text-neutral-500 mt-3 pt-3 border-t border-line">
+          <strong class="text-neutral-400">Important Disclaimer:</strong> This screening is based on signatures and automated metrics. AI outputs are experimental and can be incorrect. This platform does not take responsibility for financial losses, fraud, or damage. Always double-check and verify information directly via official government channels or authorities before taking any transaction decisions. Users act at their own individual discretion.
+        </p>
+      </div>
+    </section>
+
+    <!-- ---------------- GENERATE TAB (Point 14, minus 12/13) ---------------- -->
+    <section id="tabGenerate" class="tab-panel px-4 pt-4" hidden>
+      <h2 class="font-display font-bold text-xl mb-1">Generate</h2>
+      <p class="text-sm text-neutral-400 mb-4">Create a QR code for the things people actually scan.</p>
+
+      <!--
+        Points 12 & 13: the legacy "Compress" and "Convert" utility modules
+        have been permanently removed from this build — intentionally not
+        present anywhere in this file or its navigation.
+      -->
+
+      <div class="grid grid-cols-2 gap-3">
+        <button class="qrv-gen-tile" data-kind="social">📱<span>Social Media Profile</span></button>
+        <button class="qrv-gen-tile" data-kind="campaign">📣<span>Marketing Campaign</span></button>
+        <button class="qrv-gen-tile" data-kind="account">🪪<span>Account Card</span></button>
+        <button class="qrv-gen-tile" data-kind="review">⭐<span>Google Review</span></button>
+        <button class="qrv-gen-tile" data-kind="maps">📍<span>Google Maps Location</span></button>
+        <button class="qrv-gen-tile" data-kind="store">⬇️<span>App / Play Store Link</span></button>
+      </div>
+      <div id="genFormArea" class="mt-4"></div>
+      <p class="text-[11px] text-neutral-500 text-center mt-4">Downloading a generated QR image plays a short ad first — generating and previewing it is always free.</p>
+    </section>
+  </main>
+
+  <!-- ============================================================
+       POINT 9 / 15 — Bottom navigation
+  ============================================================ -->
+  <nav class="fixed bottom-0 left-0 right-0 max-w-[480px] mx-auto bg-panel border-t border-line grid grid-cols-5 z-30">
+    <button class="qrv-navbtn is-active" data-tab="tabHome"><span>🏠</span><span data-i18n="home">Home</span></button>
+    <button class="qrv-navbtn" data-tab="tabScan"><span>🔍</span><span data-i18n="scan">Scan</span></button>
+    <button class="qrv-navbtn" data-tab="tabGenerate"><span>➕</span><span data-i18n="generate">Generate</span></button>
+    <button id="btnGenerateComplain" class="qrv-navbtn qrv-navbtn--complain"><span>🛡️⚖️</span><span data-i18n="complain">Complain</span><em>Official portal ↗</em></button>
+    <button id="btnOpenSettings" class="qrv-navbtn"><span>⚙️</span><span data-i18n="settings">Settings</span></button>
+  </nav>
+
+  <!-- ============================================================
+       POINT 11 — Settings (theme customizer), ad-gated on open
+  ============================================================ -->
+  <div id="settingsModal" hidden class="fixed inset-0 z-50 flex items-end justify-center bg-black/70">
+    <div class="w-full max-w-[480px] bg-panel rounded-t-3xl p-6 border-t border-line">
+      <button id="btnSettingsHome" type="button" class="qrv-back-btn" aria-label="Back to home">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" class="w-4 h-4"><path d="M15 18l-6-6 6-6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        Back to Home
+      </button>
+      <h2 class="font-display font-bold text-lg mb-4">Appearance</h2>
+      <div class="grid grid-cols-3 gap-3 mb-6">
+        <button class="qrv-theme-swatch" data-theme="dark">Dark</button>
+        <button class="qrv-theme-swatch" data-theme="light">Light</button>
+        <label class="qrv-theme-swatch flex items-center justify-center gap-2 cursor-pointer relative">
+          Custom
+          <input type="color" id="customAccentInput" value="#FFB020" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer">
+        </label>
+      </div>
+      <button id="btnCloseSettings" type="button" class="w-full py-3 rounded-2xl border border-line text-sm">Close</button>
+
+      <h2 class="font-display font-bold text-lg mt-6 mb-3">Language</h2>
+      <div id="langPickerOptions" class="grid grid-cols-3 gap-2 max-h-48 overflow-y-auto"></div>
+      <p class="text-[10px] text-neutral-500 mt-2">Languages marked "(beta)" aren't fully translated yet and will show English for untranslated text rather than a guessed translation.</p>
+
+      <h2 class="font-display font-bold text-lg mt-6 mb-3">About &amp; Transparency</h2>
+      <div class="space-y-2">
+        <button id="btnOpenFounder" type="button" class="w-full text-left py-3 px-4 rounded-xl border border-line text-sm text-neutral-200">About the Founder</button>
+        <button id="btnOpenPrivacy" type="button" class="w-full text-left py-3 px-4 rounded-xl border border-line text-sm text-neutral-200">Privacy Policy</button>
+      </div>
+
+      <div class="mt-4 rounded-xl bg-ink border border-line p-4">
+        <p class="text-xs font-semibold text-neutral-300 mb-1">Revenue &amp; Growth Roadmap (transparency)</p>
+        <p class="text-[11px] text-neutral-500 leading-relaxed">QRaksha is free today. To stay sustainable long-term, the roadmap may include: non-intrusive Google AdMob/AdSense placements, an optional premium tier (unlimited AI checks, ad-free), and B2B API licensing for other apps/institutions. Core safety features — offline QR check, Panic Mode, and basic scam detection — are intended to always remain free.</p>
+        <p class="text-[11px] text-amber leading-relaxed mt-2">We are actively working toward establishing direct API integrations and formal partnerships with Government Law Enforcement Authorities as soon as possible.</p>
+      </div>
+
+      <button id="btnAboutHome" type="button" class="w-full mt-4 py-3 rounded-2xl border border-line text-sm flex items-center justify-center gap-2">
+        <span>🏠</span> Back to Home
+      </button>
+    </div>
   </div>
-</div>
 
-<!-- ═══════════════════════════════════════════════════════════
-     APP SHELL
-══════════════════════════════════════════════════════════════ -->
-<div class="app-shell" id="app-shell">
+  <!-- ============================================================
+       About Founder
+  ============================================================ -->
+  <div id="founderModal" role="dialog" aria-modal="true" hidden class="fixed inset-0 z-50 flex items-end justify-center bg-black/70">
+    <div class="w-full max-w-[480px] max-h-[86vh] overflow-y-auto bg-panel rounded-t-3xl p-6 border-t border-line">
+      <button id="btnFounderHome" type="button" aria-label="Back to home" class="flex items-center gap-1.5 text-xs text-neutral-400 mb-4">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" class="w-4 h-4"><path d="M15 18l-6-6 6-6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        Back to Home
+      </button>
+      <div class="flex items-center gap-4 mb-4">
+        <img src="./assets/founder/imtiyaz.jpg" alt="Imtiyaz Surjapuri" class="w-16 h-16 rounded-full object-cover border border-line" onerror="this.style.display='none'">
+        <div>
+          <p class="font-display font-bold text-lg">Imtiyaz Surjapuri</p>
+          <p class="text-xs text-neutral-400">Founder &amp; Developer, QRaksha</p>
+        </div>
+      </div>
 
-  <!-- ─── HEADER ─────────────────────────────────────────────── -->
-  <header class="header" id="main-header" role="banner">
-    <div class="header__inner">
+      <h3 class="text-sm font-semibold text-neutral-300 mb-2">Other Projects</h3>
+      <div id="founderPortfolioGrid" class="grid grid-cols-2 gap-3 mb-5"></div>
 
-      <!-- Logo -->
-      <a href="/" class="header__logo" id="logo" aria-label="OneSearch home">
-        <span class="header__logo-mark" aria-hidden="true">◎</span>
-        <span class="header__logo-text">OneSearch</span>
-      </a>
+      <h3 class="text-sm font-semibold text-neutral-300 mb-2">Connect</h3>
+      <div class="flex flex-wrap gap-3 mb-5">
+        <a href="https://facebook.com/ImtiyaSurjapuri" target="_blank" rel="noopener noreferrer" aria-label="Facebook" class="qrv-social-icon" style="background:#0866FF">
+          <svg viewBox="0 0 24 24" fill="currentColor" class="w-5 h-5 text-white"><path d="M22 12.06C22 6.5 17.52 2 12 2S2 6.5 2 12.06c0 5 3.66 9.15 8.44 9.94v-7.03H7.9v-2.9h2.54V9.85c0-2.5 1.49-3.89 3.77-3.89 1.09 0 2.24.2 2.24.2v2.46h-1.26c-1.24 0-1.63.77-1.63 1.56v1.88h2.78l-.44 2.9h-2.34V22c4.78-.79 8.44-4.94 8.44-9.94z"/></svg>
+        </a>
+        <a href="https://instagram.com/ImtiyazSurjapuri" target="_blank" rel="noopener noreferrer" aria-label="Instagram" class="qrv-social-icon" style="background:radial-gradient(circle at 30% 110%, #fdf497 0%, #fd5949 45%, #d6249f 60%, #285AEB 90%)">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" class="w-5 h-5 text-white"><rect x="3" y="3" width="18" height="18" rx="5" stroke-width="1.8"/><circle cx="12" cy="12" r="4" stroke-width="1.8"/><circle cx="17.5" cy="6.5" r="1" fill="currentColor" stroke="none"/></svg>
+        </a>
+        <a href="https://x.com/Imtiyazkth" target="_blank" rel="noopener noreferrer" aria-label="X" class="qrv-social-icon" style="background:#000000">
+          <svg viewBox="0 0 24 24" fill="currentColor" class="w-4 h-4 text-white"><path d="M18.9 2H22l-7.6 8.7L23 22h-6.6l-5.2-6.8L5 22H1.9l8.1-9.3L1 2h6.8l4.7 6.3L18.9 2zm-1.2 18h1.8L7.4 4H5.5l12.2 16z"/></svg>
+        </a>
+        <a href="https://youtube.com/@imtiyazvedio" target="_blank" rel="noopener noreferrer" aria-label="YouTube" class="qrv-social-icon" style="background:#FF0000">
+          <svg viewBox="0 0 24 24" fill="currentColor" class="w-5 h-5 text-white"><path d="M23 12s0-3.6-.46-5.3a3 3 0 0 0-2.1-2.1C18.7 4 12 4 12 4s-6.7 0-8.44.6a3 3 0 0 0-2.1 2.1C1 8.4 1 12 1 12s0 3.6.46 5.3a3 3 0 0 0 2.1 2.1C5.3 20 12 20 12 20s6.7 0 8.44-.6a3 3 0 0 0 2.1-2.1C23 15.6 23 12 23 12z" stroke="none"/><path d="M10 15.5v-7l6 3.5-6 3.5z" fill="#FF0000" stroke="none"/></svg>
+        </a>
+      </div>
 
-      <!-- Search -->
-      <div class="header__search" role="search">
-        <label for="global-search-input" class="sr-only">Search everything</label>
-        <div class="search-bar" id="search-bar">
-          <span class="search-bar__icon" aria-hidden="true">
-            <svg viewBox="0 0 24 24" width="17" height="17"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+      <button id="btnCloseFounder" type="button" class="w-full py-3 rounded-2xl border border-line text-sm">Close</button>
+    </div>
+  </div>
+
+  <!-- ============================================================
+       Privacy Policy
+  ============================================================ -->
+  <div id="privacyModal" role="dialog" aria-modal="true" hidden class="fixed inset-0 z-50 flex items-end justify-center bg-black/70">
+    <div class="w-full max-w-[480px] max-h-[86vh] overflow-y-auto bg-panel rounded-t-3xl p-6 border-t border-line">
+      <h2 class="font-display font-bold text-lg mb-3">Privacy Policy</h2>
+      <p class="text-sm text-neutral-300 mb-3">QR scanning and offline message checks run entirely in your browser — nothing is sent anywhere.</p>
+      <p class="text-sm text-neutral-300 mb-3">The optional AI second opinion is off by default and sends only the text/image you explicitly submit to our server, which forwards it to Mesh API. It is not stored afterward.</p>
+      <p class="text-sm text-neutral-300 mb-3">Success stories you explicitly submit and consent to publish are stored in our database (<code class="text-xs bg-ink px-1 rounded">success_stories</code>/<code class="text-xs bg-ink px-1 rounded">successStories</code>). We ask you not to include anyone else's personal identifying details (phone numbers, account numbers, full addresses of third parties) in your story text — only your own experience.</p>
+      <p class="text-sm text-neutral-300 mb-5">A human reviews each story before it is ever published publicly or on social media.</p>
+      <button id="btnClosePrivacy" type="button" class="w-full py-3 rounded-2xl border border-line text-sm">Close</button>
+    </div>
+  </div>
+
+  <!-- ============================================================
+       Consent modal (AI opt-in) — unchanged behavior from before
+  ============================================================ -->
+  <div id="consentModal" role="dialog" aria-modal="true" hidden class="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-6">
+    <div class="w-full max-w-sm bg-panel rounded-3xl p-6 border border-line">
+      <h2 class="font-display font-bold text-lg mb-2">Enable AI second opinion?</h2>
+      <p class="text-sm text-neutral-300 mb-4">Offline and free threat-intel checks always run automatically. An AI second opinion sends the text/image to our server, which forwards it to Mesh API. Nothing is stored afterward.</p>
+      <label class="flex items-center gap-2 text-sm mb-4">
+        <input type="checkbox" id="consentCheckbox"> I understand and want to enable AI second opinion
+      </label>
+      <div class="flex gap-2">
+        <button id="btnConsentAccept" type="button" class="flex-1 py-2.5 rounded-xl bg-amber text-ink font-semibold text-sm">Enable</button>
+        <button id="btnConsentDecline" type="button" class="flex-1 py-2.5 rounded-xl border border-line text-sm">Not now</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================================================
+       Panic Mode — zero network, zero ads, always instant
+  ============================================================ -->
+  <div id="panicModal" role="dialog" aria-modal="true" hidden class="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 px-4 overflow-y-auto">
+    <div class="max-w-4xl mx-auto w-full px-0 mb-6 max-h-[92vh] overflow-y-auto">
+    <div class="w-full max-w-sm mx-auto bg-panel rounded-3xl p-6 border border-danger/40">
+      <h2 class="font-display font-bold text-xl mb-3 text-danger" data-i18n="panicTitle">Stop. Think. Act.</h2>
+      <ol class="text-sm text-neutral-200 space-y-3 mb-5 list-decimal list-inside">
+        <li><strong class="text-danger">Stop.</strong> No real police, court, or bank official asks you to stay on video call or transfer money. Hang up.</li>
+        <li><strong class="text-danger">Think.</strong> "Digital arrest" is not a real legal process in India.</li>
+        <li><strong class="text-danger">Act.</strong> Report now. Do not send more money.</li>
+      </ol>
+
+      <div class="flex flex-col gap-3">
+        <!-- Official 1930 Cyber Fraud Helpline — massive, unmissable, tel: dialer intent -->
+        <a href="tel:1930"
+           class="flex flex-col items-center justify-center gap-1 bg-gray-900 border-2 border-red-500 rounded-xl p-4
+                  hover:bg-gray-800 active:scale-[0.98] transition-all duration-150">
+          <span class="text-xs sm:text-sm font-bold text-white tracking-wide text-center" data-i18n="callHelplineLabel">
+            🚨 CALL OFFICIAL HELPLINE
           </span>
-          <input
-            type="search" id="global-search-input" class="search-bar__input"
-            name="q" placeholder="Search files, emails, photos, sheets…"
-            autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"
-            aria-label="Search everything" aria-autocomplete="list"
-            aria-controls="search-suggestions" aria-expanded="false"
-            role="combobox" maxlength="512"
-          />
-          <button class="search-bar__clear btn-icon" id="search-clear-btn" type="button" aria-label="Clear search" hidden>
-            <svg aria-hidden="true" viewBox="0 0 24 24" width="15" height="15"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-          </button>
-          <!-- Suggestions dropdown -->
-          <div class="search-suggestions-panel" id="search-suggestions-panel" hidden>
-            <ul class="search-suggestions" id="search-suggestions" role="listbox" aria-label="Search suggestions"></ul>
-            <div class="search-suggestions__history" id="search-history-dropdown" hidden>
-              <p class="search-suggestions__section-label">Recent searches</p>
-              <ul id="search-history-list" class="search-history-list"></ul>
-              <button class="search-suggestions__clear-history" id="clear-history-btn" type="button">Clear history</button>
-            </div>
-          </div>
-        </div>
-        <button class="btn btn--primary search-submit-btn" id="search-submit-btn" type="button">Search</button>
-      </div>
+          <span class="text-3xl font-extrabold text-red-500 leading-none">1930</span>
+        </a>
 
-      <!-- Actions -->
-      <div class="header__actions" id="header-actions">
-        <button class="btn-icon header__theme-toggle" id="theme-toggle-btn" type="button" aria-label="Toggle theme" aria-pressed="true">
-          <svg class="icon-moon" aria-hidden="true" viewBox="0 0 24 24" width="17" height="17"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>
-          <svg class="icon-sun"  aria-hidden="true" viewBox="0 0 24 24" width="17" height="17"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
-        </button>
+        <!-- National Cyber Crime Portal — glowing crimson premium CTA -->
+        <a href="https://cybercrime.gov.in" target="_blank" rel="noopener noreferrer"
+           class="text-center py-3 rounded-2xl border border-red-500/60 text-sm font-semibold text-white
+                  bg-gradient-to-r from-red-800/40 via-red-600/30 to-red-800/40
+                  shadow-[0_0_15px_rgba(239,68,68,0.5)] hover:shadow-[0_0_22px_rgba(239,68,68,0.7)]
+                  transition-shadow duration-200"
+           data-i18n="reportPortalLabel">
+          Report at cybercrime.gov.in
+        </a>
 
-        <!-- User/Account menu -->
-        <div class="header__user" id="user-profile">
-          <button class="user-avatar-stack" id="user-avatar-btn" type="button"
-            aria-label="Account menu" aria-haspopup="true" aria-expanded="false" aria-controls="user-menu">
-            <div class="avatar-stack" id="avatar-stack">
-              <div class="avatar-chip avatar-chip--empty" aria-hidden="true">
-                <span class="avatar-chip__initials">?</span>
-              </div>
-            </div>
-            <span class="avatar-stack__count" id="avatar-stack-count" hidden></span>
-          </button>
+        <!-- Compliance transparency notice -->
+        <p class="text-[11px] text-gray-400 tracking-normal block text-center mt-1 italic leading-snug">
+          हम अपने उपयोगकर्ताओं की सुरक्षा के लिए संबंधित सरकारी विनियामक प्राधिकरणों के साथ सीधे संरचनात्मक एकीकरण और आधिकारिक साझेदारी स्थापित करने के लिए सक्रिय रूप से प्रयासरत हैं।
+        </p>
 
-          <nav class="user-menu" id="user-menu" role="menu" aria-label="Account menu" hidden>
-            <div class="user-menu__accounts" id="user-menu-accounts">
-              <p class="user-menu__no-accounts">No accounts connected</p>
-            </div>
-            <hr class="user-menu__divider" />
-            <button class="user-menu__item user-menu__item--add" role="menuitem" id="menu-add-account-btn" type="button">
-              <svg aria-hidden="true" viewBox="0 0 24 24" width="15" height="15"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-              Add another account
-            </button>
-            <hr class="user-menu__divider" />
-            <ul class="user-menu__list">
-              <li role="none"><button class="user-menu__item" role="menuitem" id="menu-accounts-btn" type="button">
-                <svg aria-hidden="true" viewBox="0 0 24 24" width="14" height="14"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>
-                Connected Sources
-              </button></li>
-              <li role="none"><button class="user-menu__item" role="menuitem" id="menu-settings-btn" type="button">
-                <svg aria-hidden="true" viewBox="0 0 24 24" width="14" height="14"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
-                Settings
-              </button></li>
-              <li role="none"><button class="user-menu__item" role="menuitem" id="menu-privacy-btn" type="button">
-                <svg aria-hidden="true" viewBox="0 0 24 24" width="14" height="14"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-                Privacy
-              </button></li>
-              <li role="none"><button class="user-menu__item" role="menuitem" id="menu-help-btn" type="button">
-                <svg aria-hidden="true" viewBox="0 0 24 24" width="14" height="14"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 015.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
-                Help
-              </button></li>
-              <li role="none"><button class="user-menu__item user-menu__item--danger" role="menuitem" id="menu-disconnect-all-btn" type="button">
-                <svg aria-hidden="true" viewBox="0 0 24 24" width="14" height="14"><polyline points="9 10 4 15 9 20"/><path d="M20 4v7a4 4 0 01-4 4H4"/></svg>
-                Disconnect All
-              </button></li>
-            </ul>
-          </nav>
-        </div>
-
-        <button class="btn-icon header__sidebar-toggle" id="sidebar-toggle-btn" type="button" aria-label="Toggle sidebar" aria-controls="sidebar" aria-expanded="false">
-          <svg aria-hidden="true" viewBox="0 0 24 24" width="19" height="19"><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
-        </button>
+        <button id="btnClosePanic" type="button" class="py-2 text-sm text-neutral-400">Close</button>
       </div>
     </div>
-  </header>
-
-  <!-- ─── LAYOUT ─────────────────────────────────────────────── -->
-  <div class="app-layout" id="app-layout">
-
-    <!-- ── SIDEBAR ───────────────────────────────────────────── -->
-    <aside class="sidebar" id="sidebar" role="complementary" aria-label="Navigation">
-      <nav class="sidebar__nav" id="sidebar-nav" aria-label="Primary navigation">
-        <ul class="sidebar__nav-list" role="list">
-          <li><a href="#" class="sidebar__nav-link sidebar__nav-link--active" id="nav-dashboard" aria-current="page" data-view="dashboard">
-            <svg aria-hidden="true" viewBox="0 0 24 24" width="17" height="17"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
-            <span>Dashboard</span>
-          </a></li>
-          <li><a href="#" class="sidebar__nav-link" id="nav-results" data-view="results">
-            <svg aria-hidden="true" viewBox="0 0 24 24" width="17" height="17"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-            <span>Search Results</span>
-            <span class="badge badge--count" id="nav-results-count" hidden>0</span>
-          </a></li>
-          <li><a href="#" class="sidebar__nav-link" id="nav-accounts" data-view="accounts">
-            <svg aria-hidden="true" viewBox="0 0 24 24" width="17" height="17"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>
-            <span>Connected Sources</span>
-            <span class="badge badge--count" id="nav-accounts-count" hidden>0</span>
-          </a></li>
-          <li><a href="#" class="sidebar__nav-link" id="nav-recent" data-view="recent">
-            <svg aria-hidden="true" viewBox="0 0 24 24" width="17" height="17"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-            <span>Recent</span>
-          </a></li>
-          <li><a href="#" class="sidebar__nav-link" id="nav-starred" data-view="starred">
-            <svg aria-hidden="true" viewBox="0 0 24 24" width="17" height="17"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
-            <span>Starred</span>
-          </a></li>
-          <li><a href="#" class="sidebar__nav-link" id="nav-settings" data-view="settings">
-            <svg aria-hidden="true" viewBox="0 0 24 24" width="17" height="17"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
-            <span>Settings</span>
-          </a></li>
-        </ul>
-
-        <!-- Dynamic sources -->
-        <div class="sidebar__section" id="sidebar-sources-section">
-          <h3 class="sidebar__section-label">Sources</h3>
-          <ul class="sidebar__nav-list" id="sidebar-sources-list" role="list"></ul>
-        </div>
-
-        <!-- Index meter -->
-        <div class="sidebar__storage" id="sidebar-storage" role="region" aria-label="Index size">
-          <h3 class="sidebar__section-label">Index</h3>
-          <div class="storage-meter">
-            <div class="storage-meter__bar" role="progressbar" id="storage-usage-bar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
-              <div class="storage-meter__fill" id="storage-usage-fill"></div>
-            </div>
-            <p class="storage-meter__label" id="storage-usage-label">Calculating…</p>
-          </div>
-        </div>
-      </nav>
-      <div class="sidebar__overlay" id="sidebar-overlay" aria-hidden="true" tabindex="-1"></div>
-    </aside>
-
-    <!-- ── MAIN ───────────────────────────────────────────────── -->
-    <main class="main-content" id="main-content" role="main" tabindex="-1">
-
-      <!-- ════════════════════════════════════════════════════════
-           DASHBOARD VIEW
-      ════════════════════════════════════════════════════════ -->
-      <section class="view" id="view-dashboard" data-view="dashboard">
-        <header class="view-header">
-          <div class="view-header__text">
-            <h1 class="view-header__title">Dashboard</h1>
-            <p class="view-header__subtitle" id="dashboard-greeting">Connect your accounts to get started.</p>
-          </div>
-          <div class="view-header__actions">
-            <button class="btn btn--secondary" id="reindex-all-btn" type="button">
-              <svg aria-hidden="true" viewBox="0 0 24 24" width="15" height="15"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/></svg>
-              Re-index All
-            </button>
-            <button class="btn btn--primary" id="sync-all-btn" type="button">
-              <svg aria-hidden="true" viewBox="0 0 24 24" width="15" height="15"><polyline points="1 4 1 10 7 10"/><polyline points="23 20 23 14 17 14"/><path d="M20.49 9A9 9 0 005.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 013.51 15"/></svg>
-              Sync All
-            </button>
-          </div>
-        </header>
-
-        <!-- Stats row -->
-        <div class="stats-row" id="dashboard-stats" role="region" aria-label="Statistics">
-          <div class="stat-card"><span class="stat-card__value" id="stat-files-value">—</span><span class="stat-card__label">Files</span></div>
-          <div class="stat-card"><span class="stat-card__value" id="stat-emails-value">—</span><span class="stat-card__label">Emails</span></div>
-          <div class="stat-card"><span class="stat-card__value" id="stat-photos-value">—</span><span class="stat-card__label">Photos</span></div>
-          <div class="stat-card"><span class="stat-card__value" id="stat-sheets-value">—</span><span class="stat-card__label">Sheets</span></div>
-          <div class="stat-card"><span class="stat-card__value" id="stat-accounts-value">—</span><span class="stat-card__label">Accounts</span></div>
-          <div class="stat-card"><span class="stat-card__value" id="stat-sync-value">—</span><span class="stat-card__label">Last synced</span></div>
-        </div>
-
-        <!-- Background index status bar -->
-        <div class="index-status-bar" id="index-status-bar" hidden>
-          <div class="index-status-bar__spinner" aria-hidden="true"><div class="spinner__ring spinner__ring--sm"></div></div>
-          <span class="index-status-bar__text" id="index-status-text">Indexing…</span>
-          <div class="index-status-bar__progress">
-            <div class="progress-bar"><div class="progress-bar__fill" id="index-status-fill"></div></div>
-          </div>
-        </div>
-
-        <!-- Grouped sources -->
-        <section class="connected-sources" id="connected-sources" aria-label="Connected sources">
-          <div class="connected-sources__header">
-            <h2 class="section-title">Connected Sources</h2>
-            <button class="btn btn--ghost btn--small" id="add-account-dashboard-btn" type="button">
-              <svg aria-hidden="true" viewBox="0 0 24 24" width="13" height="13"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-              Add Account
-            </button>
-          </div>
-          <!-- Grouped accordion: service → accounts -->
-          <div class="service-groups" id="service-groups">
-            <!-- Dynamically populated -->
-          </div>
-          <!-- Empty state -->
-          <div class="sources-empty" id="sources-empty">
-            <div class="sources-empty__icon" aria-hidden="true">
-              <svg viewBox="0 0 24 24" width="46" height="46"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-            </div>
-            <h3>No accounts connected</h3>
-            <p>Add a Google account to start searching.</p>
-            <button class="btn btn--primary" id="sources-empty-add-btn" type="button">
-              <svg aria-hidden="true" viewBox="0 0 24 24" width="15" height="15"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-              Add Google Account
-            </button>
-          </div>
-        </section>
-
-        <!-- Local Files -->
-        <section class="local-section" id="local-section" aria-label="Local files">
-          <h2 class="section-title">Local Files</h2>
-          <div class="local-card" id="local-card">
-            <div class="local-card__header">
-              <div class="source-card__icon source-card__icon--local" aria-hidden="true"></div>
-              <div class="local-card__meta">
-                <h3>Local Files</h3>
-                <span class="source-card__status" id="local-status">No folder selected</span>
-              </div>
-              <span class="badge badge--success" id="local-badge" hidden>Indexed</span>
-            </div>
-            <div class="local-card__body">
-              <p class="source-card__description">Index folders on this device. Files never leave your browser.</p>
-              <div id="local-stats" hidden>
-                <span class="source-card__stat" id="local-file-count"></span>
-                <span class="source-card__stat" id="local-folder-name"></span>
-                <span class="source-card__stat" id="local-last-sync"></span>
-              </div>
-              <div id="local-progress" hidden>
-                <div class="progress-bar"><div class="progress-bar__fill" id="local-progress-fill"></div></div>
-                <span class="progress-bar__label" id="local-progress-label">Indexing…</span>
-              </div>
-            </div>
-            <div class="local-card__footer">
-              <button class="btn btn--primary" id="local-add-folder-btn" type="button">
-                <svg aria-hidden="true" viewBox="0 0 24 24" width="13" height="13"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg>
-                Select Folder
-              </button>
-              <button class="btn btn--ghost" id="local-rescan-btn" type="button" hidden>↻ Re-scan</button>
-              <button class="btn btn--ghost btn--danger" id="local-remove-btn" type="button" hidden>Remove</button>
-              <input type="file" id="local-folder-input" class="sr-only" webkitdirectory multiple aria-hidden="true" tabindex="-1" />
-            </div>
-          </div>
-        </section>
-      </section>
-
-      <!-- ════════════════════════════════════════════════════════
-           CONNECTED SOURCES VIEW
-      ════════════════════════════════════════════════════════ -->
-      <section class="view" id="view-accounts" data-view="accounts" hidden>
-        <header class="view-header">
-          <div class="view-header__text">
-            <h1 class="view-header__title">Connected Sources</h1>
-            <p class="view-header__subtitle">Manage your Google accounts and services.</p>
-          </div>
-          <div class="view-header__actions">
-            <button class="btn btn--primary" id="add-account-btn" type="button">
-              <svg aria-hidden="true" viewBox="0 0 24 24" width="15" height="15"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-              Add Google Account
-            </button>
-          </div>
-        </header>
-        <div class="accounts-grid" id="accounts-grid" role="list"></div>
-        <div class="state-empty" id="accounts-empty" hidden>
-          <div class="state-empty__icon"><svg viewBox="0 0 24 24" width="46" height="46"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/></svg></div>
-          <h2 class="state-empty__title">No accounts connected</h2>
-          <p class="state-empty__body">Add a Google account to begin.</p>
-          <button class="btn btn--primary" id="accounts-empty-add-btn" type="button">Add Google Account</button>
-        </div>
-      </section>
-
-      <!-- ════════════════════════════════════════════════════════
-           SEARCH RESULTS VIEW
-      ════════════════════════════════════════════════════════ -->
-      <section class="view" id="view-results" data-view="results" hidden>
-        <header class="view-header view-header--results">
-          <div class="view-header__text">
-            <h1 class="view-header__title">
-              Results for <span class="view-header__query" id="results-query-label"></span>
-            </h1>
-            <p class="view-header__subtitle" id="results-count-label" aria-live="polite" aria-atomic="true">Searching…</p>
-          </div>
-        </header>
-
-        <!-- Typo correction banner -->
-        <div class="correction-banner" id="correction-banner" hidden>
-          <span class="correction-banner__text" id="correction-banner-text"></span>
-          <button class="btn btn--ghost btn--small" id="correction-accept-btn" type="button">Search instead</button>
-          <button class="btn-icon correction-banner__close" id="correction-dismiss-btn" type="button" aria-label="Dismiss">
-            <svg aria-hidden="true" viewBox="0 0 24 24" width="14" height="14"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-          </button>
-        </div>
-
-        <!-- Filters -->
-        <div class="search-filters" id="search-filters" role="group" aria-label="Search filters">
-          <div class="search-filters__left">
-            <div class="filter-group">
-              <label for="filter-type"    class="filter-label">Type</label>
-              <select class="filter-select" id="filter-type">
-                <option value="all">All types</option>
-                <option value="document">Documents</option>
-                <option value="image">Images</option>
-                <option value="email">Emails</option>
-                <option value="spreadsheet">Spreadsheets</option>
-                <option value="pdf">PDFs</option>
-                <option value="video">Videos</option>
-                <option value="audio">Audio</option>
-                <option value="code">Code</option>
-              </select>
-            </div>
-            <div class="filter-group">
-              <label for="filter-source"  class="filter-label">Service</label>
-              <select class="filter-select" id="filter-source">
-                <option value="all">All services</option>
-                <option value="drive">Google Drive</option>
-                <option value="photos">Google Photos</option>
-                <option value="gmail">Gmail</option>
-                <option value="sheets">Google Sheets</option>
-                <option value="local">Local Files</option>
-              </select>
-            </div>
-            <div class="filter-group">
-              <label for="filter-account" class="filter-label">Account</label>
-              <select class="filter-select" id="filter-account">
-                <option value="all">All accounts</option>
-              </select>
-            </div>
-            <div class="filter-group">
-              <label for="filter-date"    class="filter-label">Date</label>
-              <select class="filter-select" id="filter-date">
-                <option value="any">Any time</option>
-                <option value="today">Today</option>
-                <option value="week">This week</option>
-                <option value="month">This month</option>
-                <option value="year">This year</option>
-                <option value="custom">Custom…</option>
-              </select>
-            </div>
-            <div class="filter-group filter-group--date-range" id="filter-date-range" hidden>
-              <label for="filter-date-from" class="filter-label">From</label>
-              <input type="date" class="filter-input" id="filter-date-from" />
-              <label for="filter-date-to"   class="filter-label">To</label>
-              <input type="date" class="filter-input" id="filter-date-to" />
-            </div>
-            <div class="filter-group">
-              <label for="filter-sort"    class="filter-label">Sort</label>
-              <select class="filter-select" id="filter-sort">
-                <option value="relevance">Relevance</option>
-                <option value="date-desc">Newest</option>
-                <option value="date-asc">Oldest</option>
-                <option value="name-asc">Name A–Z</option>
-                <option value="size-desc">Largest</option>
-              </select>
-            </div>
-          </div>
-          <div class="search-filters__right">
-            <div class="view-toggle" role="group" aria-label="View mode">
-              <button class="view-toggle__btn view-toggle__btn--active" id="view-list-btn" type="button" aria-label="List" aria-pressed="true">
-                <svg aria-hidden="true" viewBox="0 0 24 24" width="15" height="15"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
-              </button>
-              <button class="view-toggle__btn" id="view-grid-btn" type="button" aria-label="Grid" aria-pressed="false">
-                <svg aria-hidden="true" viewBox="0 0 24 24" width="15" height="15"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
-              </button>
-            </div>
-            <button class="btn btn--ghost btn--small" id="clear-filters-btn" type="button">Clear filters</button>
-          </div>
-        </div>
-
-        <!-- Results layout -->
-        <div class="results-layout" id="results-layout">
-          <div class="results-panel" id="results-panel" role="region" aria-label="Search results">
-            <div class="state-loading" id="results-loading" role="status" hidden>
-              <div class="spinner"><div class="spinner__ring"></div></div>
-              <p class="state-loading__text">Searching…</p>
-            </div>
-            <div class="state-empty" id="results-empty" hidden>
-              <div class="state-empty__icon"><svg viewBox="0 0 24 24" width="46" height="46"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></div>
-              <h2 class="state-empty__title">No results found</h2>
-              <p class="state-empty__body" id="results-empty-message">Try different keywords or connect more accounts.</p>
-              <button class="btn btn--primary" id="results-empty-cta" type="button">Clear filters</button>
-            </div>
-            <div class="state-error" id="results-error" role="alert" hidden>
-              <div class="state-error__icon"><svg viewBox="0 0 24 24" width="46" height="46"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg></div>
-              <h2 class="state-error__title">Search failed</h2>
-              <p class="state-error__body" id="results-error-message"></p>
-              <button class="btn btn--primary" id="results-retry-btn" type="button">Retry</button>
-            </div>
-            <!-- Virtual scroll -->
-            <div class="virtual-scroll-container" id="virtual-scroll-container">
-              <div id="vs-spacer-top"></div>
-              <ol class="results-list" id="results-list" role="list" aria-live="polite" aria-atomic="false"></ol>
-              <div id="vs-spacer-bottom"></div>
-            </div>
-            <!-- Pagination -->
-            <nav class="results-pagination" id="results-pagination" aria-label="Pagination" hidden>
-              <button class="btn btn--ghost pagination__btn" id="pagination-prev-btn" type="button" aria-label="Previous" disabled>
-                <svg aria-hidden="true" viewBox="0 0 24 24" width="15" height="15"><polyline points="15 18 9 12 15 6"/></svg> Prev
-              </button>
-              <span class="pagination__info" id="pagination-info" aria-live="polite">Page 1 of 1</span>
-              <button class="btn btn--ghost pagination__btn" id="pagination-next-btn" type="button" aria-label="Next">
-                Next <svg aria-hidden="true" viewBox="0 0 24 24" width="15" height="15"><polyline points="9 18 15 12 9 6"/></svg>
-              </button>
-            </nav>
-          </div>
-
-          <!-- Preview panel -->
-          <aside class="preview-panel" id="preview-panel" role="complementary" aria-label="Preview" hidden>
-            <header class="preview-panel__header">
-              <h2 class="preview-panel__title" id="preview-title">Preview</h2>
-              <div class="preview-panel__actions">
-                <button class="btn-icon" id="preview-open-btn"     type="button" aria-label="Open original">
-                  <svg aria-hidden="true" viewBox="0 0 24 24" width="15" height="15"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
-                </button>
-                <button class="btn-icon" id="preview-download-btn" type="button" aria-label="Download" hidden>
-                  <svg aria-hidden="true" viewBox="0 0 24 24" width="15" height="15"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-                </button>
-                <button class="btn-icon" id="preview-copy-link-btn" type="button" aria-label="Copy link" hidden>
-                  <svg aria-hidden="true" viewBox="0 0 24 24" width="15" height="15"><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/></svg>
-                </button>
-                <button class="btn-icon" id="preview-star-btn"     type="button" aria-label="Star" aria-pressed="false">
-                  <svg aria-hidden="true" viewBox="0 0 24 24" width="15" height="15"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
-                </button>
-                <button class="btn-icon" id="preview-close-btn"    type="button" aria-label="Close preview">
-                  <svg aria-hidden="true" viewBox="0 0 24 24" width="15" height="15"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-                </button>
-              </div>
-            </header>
-            <!-- Local file actions -->
-            <div class="preview-local-actions" id="preview-local-actions" hidden>
-              <button class="btn btn--ghost btn--small" id="preview-reselect-btn"  type="button">Re-select Folder</button>
-              <button class="btn btn--ghost btn--small" id="preview-copy-path-btn" type="button">Copy Path</button>
-            </div>
-            <div class="preview-panel__body" id="preview-body">
-              <div class="preview-placeholder" id="preview-placeholder">
-                <svg aria-hidden="true" viewBox="0 0 24 24" width="38" height="38"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-                <p>Select a result to preview</p>
-              </div>
-            </div>
-            <footer class="preview-panel__meta" id="preview-meta" hidden>
-              <dl class="meta-list" id="preview-meta-list"></dl>
-            </footer>
-          </aside>
-        </div>
-      </section>
-
-      <!-- ════════════════════════════════════════════════════════
-           RECENT VIEW
-      ════════════════════════════════════════════════════════ -->
-      <section class="view" id="view-recent" data-view="recent" hidden>
-        <header class="view-header">
-          <h1 class="view-header__title">Recent</h1>
-          <p class="view-header__subtitle">Files and emails accessed recently.</p>
-        </header>
-        <ol class="results-list" id="recent-list" role="list"></ol>
-        <div class="state-empty" id="recent-empty" hidden>
-          <p class="state-empty__title">Nothing yet</p>
-          <p class="state-empty__body">Items you open will appear here.</p>
-        </div>
-      </section>
-
-      <!-- ════════════════════════════════════════════════════════
-           STARRED VIEW
-      ════════════════════════════════════════════════════════ -->
-      <section class="view" id="view-starred" data-view="starred" hidden>
-        <header class="view-header">
-          <h1 class="view-header__title">Starred</h1>
-          <p class="view-header__subtitle">Items you've starred for quick access.</p>
-        </header>
-        <ol class="results-list" id="starred-list" role="list"></ol>
-        <div class="state-empty" id="starred-empty" hidden>
-          <p class="state-empty__title">No starred items</p>
-          <p class="state-empty__body">Star any result to pin it here.</p>
-        </div>
-      </section>
-
-      <!-- ════════════════════════════════════════════════════════
-           SETTINGS VIEW
-      ════════════════════════════════════════════════════════ -->
-      <section class="view" id="view-settings" data-view="settings" hidden>
-        <header class="view-header">
-          <div class="view-header__text">
-            <h1 class="view-header__title">Settings</h1>
-            <p class="view-header__subtitle">Customise OneSearch to your preferences.</p>
-          </div>
-        </header>
-
-        <div class="settings-layout">
-          <!-- Settings nav -->
-          <nav class="settings-nav" aria-label="Settings sections">
-            <button class="settings-nav__item settings-nav__item--active" data-settings-tab="appearance" type="button">Appearance</button>
-            <button class="settings-nav__item" data-settings-tab="search"     type="button">Search</button>
-            <button class="settings-nav__item" data-settings-tab="performance" type="button">Performance</button>
-            <button class="settings-nav__item" data-settings-tab="privacy"    type="button">Privacy</button>
-            <button class="settings-nav__item" data-settings-tab="data"       type="button">Indexed Data</button>
-            <button class="settings-nav__item" data-settings-tab="about"      type="button">About</button>
-          </nav>
-
-          <!-- Settings panels -->
-          <div class="settings-panels">
-
-            <!-- Appearance -->
-            <div class="settings-panel" id="settings-tab-appearance">
-              <h2 class="settings-panel__title">Appearance</h2>
-              <div class="settings-row">
-                <div class="settings-row__label">
-                  <p class="settings-row__name">Theme</p>
-                  <p class="settings-row__desc">Choose between dark and light mode.</p>
-                </div>
-                <div class="settings-row__control">
-                  <select class="filter-select" id="setting-theme">
-                    <option value="dark">Dark</option>
-                    <option value="light">Light</option>
-                    <option value="system">System</option>
-                  </select>
-                </div>
-              </div>
-              <div class="settings-row">
-                <div class="settings-row__label">
-                  <p class="settings-row__name">Results per page</p>
-                  <p class="settings-row__desc">How many search results to show per page.</p>
-                </div>
-                <div class="settings-row__control">
-                  <select class="filter-select" id="setting-page-size">
-                    <option value="10">10</option>
-                    <option value="20" selected>20</option>
-                    <option value="50">50</option>
-                    <option value="100">100</option>
-                  </select>
-                </div>
-              </div>
-            </div>
-
-            <!-- Search -->
-            <div class="settings-panel" id="settings-tab-search" hidden>
-              <h2 class="settings-panel__title">Search</h2>
-              <div class="settings-row">
-                <div class="settings-row__label">
-                  <p class="settings-row__name">Fuzzy search</p>
-                  <p class="settings-row__desc">Match results even with typos in your query.</p>
-                </div>
-                <div class="settings-row__control">
-                  <label class="toggle"><input type="checkbox" id="setting-fuzzy" checked /><span class="toggle__slider"></span></label>
-                </div>
-              </div>
-              <div class="settings-row">
-                <div class="settings-row__label">
-                  <p class="settings-row__name">Search suggestions</p>
-                  <p class="settings-row__desc">Show live suggestions while typing.</p>
-                </div>
-                <div class="settings-row__control">
-                  <label class="toggle"><input type="checkbox" id="setting-suggestions" checked /><span class="toggle__slider"></span></label>
-                </div>
-              </div>
-              <div class="settings-row">
-                <div class="settings-row__label">
-                  <p class="settings-row__name">Search history</p>
-                  <p class="settings-row__desc">Remember recent searches.</p>
-                </div>
-                <div class="settings-row__control">
-                  <label class="toggle"><input type="checkbox" id="setting-history" checked /><span class="toggle__slider"></span></label>
-                </div>
-              </div>
-              <div class="settings-row">
-                <div class="settings-row__label">
-                  <p class="settings-row__name">Max Gmail messages</p>
-                  <p class="settings-row__desc">Limit how many emails are indexed per account.</p>
-                </div>
-                <div class="settings-row__control">
-                  <select class="filter-select" id="setting-gmail-max">
-                    <option value="500">500</option>
-                    <option value="1000">1,000</option>
-                    <option value="2000" selected>2,000</option>
-                    <option value="5000">5,000</option>
-                  </select>
-                </div>
-              </div>
-              <div class="settings-row">
-                <div class="settings-row__label">
-                  <p class="settings-row__name">Max Photos</p>
-                  <p class="settings-row__desc">Limit how many photos are indexed per account.</p>
-                </div>
-                <div class="settings-row__control">
-                  <select class="filter-select" id="setting-photos-max">
-                    <option value="1000">1,000</option>
-                    <option value="5000" selected>5,000</option>
-                    <option value="10000">10,000</option>
-                  </select>
-                </div>
-              </div>
-            </div>
-
-            <!-- Performance -->
-            <div class="settings-panel" id="settings-tab-performance" hidden>
-              <h2 class="settings-panel__title">Performance</h2>
-              <div class="settings-row">
-                <div class="settings-row__label">
-                  <p class="settings-row__name">Background indexing</p>
-                  <p class="settings-row__desc">Index new files in the background without blocking search.</p>
-                </div>
-                <div class="settings-row__control">
-                  <label class="toggle"><input type="checkbox" id="setting-bg-index" checked /><span class="toggle__slider"></span></label>
-                </div>
-              </div>
-              <div class="settings-row">
-                <div class="settings-row__label">
-                  <p class="settings-row__name">Virtual scrolling</p>
-                  <p class="settings-row__desc">Efficiently render large result lists. Always on for best performance.</p>
-                </div>
-                <div class="settings-row__control">
-                  <span class="settings-row__badge">Always On</span>
-                </div>
-              </div>
-            </div>
-
-            <!-- Privacy -->
-            <div class="settings-panel" id="settings-tab-privacy" hidden>
-              <h2 class="settings-panel__title">Privacy</h2>
-              <div class="settings-privacy-notice">
-                <svg aria-hidden="true" viewBox="0 0 24 24" width="20" height="20"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-                <div>
-                  <p><strong>OneSearch is 100% private.</strong></p>
-                  <p>No servers. No analytics. No tracking. No accounts. Your files never leave your browser. OAuth tokens live only in memory — cleared when you close the tab. Indexed metadata is stored only in your browser's IndexedDB.</p>
-                </div>
-              </div>
-              <div class="settings-row settings-row--danger">
-                <div class="settings-row__label">
-                  <p class="settings-row__name">Clear search history</p>
-                  <p class="settings-row__desc">Remove all recent searches and viewed items.</p>
-                </div>
-                <div class="settings-row__control">
-                  <button class="btn btn--secondary btn--small" id="setting-clear-history-btn" type="button">Clear History</button>
-                </div>
-              </div>
-              <div class="settings-row settings-row--danger">
-                <div class="settings-row__label">
-                  <p class="settings-row__name">Clear all indexed data</p>
-                  <p class="settings-row__desc">Remove all indexed metadata from IndexedDB. Your actual files are not deleted.</p>
-                </div>
-                <div class="settings-row__control">
-                  <button class="btn btn--secondary btn--small" id="setting-clear-index-btn" type="button">Clear Index</button>
-                </div>
-              </div>
-              <div class="settings-row settings-row--danger">
-                <div class="settings-row__label">
-                  <p class="settings-row__name">Disconnect all accounts</p>
-                  <p class="settings-row__desc">Remove all Google accounts and their indexed data.</p>
-                </div>
-                <div class="settings-row__control">
-                  <button class="btn btn--danger btn--small" id="setting-disconnect-all-btn" type="button">Disconnect All</button>
-                </div>
-              </div>
-              <div class="settings-row settings-row--danger">
-                <div class="settings-row__label">
-                  <p class="settings-row__name">Reset everything</p>
-                  <p class="settings-row__desc">Delete all data — index, accounts, history, preferences. Start fresh.</p>
-                </div>
-                <div class="settings-row__control">
-                  <button class="btn btn--danger btn--small" id="setting-reset-btn" type="button">Reset Everything</button>
-                </div>
-              </div>
-            </div>
-
-            <!-- Indexed Data -->
-            <div class="settings-panel" id="settings-tab-data" hidden>
-              <h2 class="settings-panel__title">Indexed Data</h2>
-              <div class="settings-data-grid" id="settings-data-grid">
-                <!-- Populated by app.js -->
-              </div>
-            </div>
-
-            <!-- About -->
-            <div class="settings-panel" id="settings-tab-about" hidden>
-              <h2 class="settings-panel__title">About OneSearch</h2>
-              <div class="settings-about">
-                <div class="settings-about__logo">
-                  <span class="logo-mark" style="font-size:2.5rem">◎</span>
-                  <div>
-                    <p class="settings-about__name">OneSearch</p>
-                    <p class="settings-about__version" id="settings-version">Version 3.0.0</p>
-                  </div>
-                </div>
-                <p class="settings-about__desc">Privacy-first personal universal search engine. Runs entirely in your browser. No backend. No tracking. No servers.</p>
-                <div class="settings-about__links">
-                  <a href="https://github.com" target="_blank" rel="noopener noreferrer" class="btn btn--ghost btn--small">GitHub</a>
-                  <a href="#" class="btn btn--ghost btn--small" id="about-privacy-btn">Privacy Policy</a>
-                  <a href="#" class="btn btn--ghost btn--small" id="about-licenses-btn">Licenses</a>
-                </div>
-                <p class="settings-about__tech">Built with vanilla JavaScript · No frameworks · IndexedDB · Web Workers · File System Access API · Google Identity Services</p>
-              </div>
-            </div>
-
-          </div>
-        </div>
-      </section>
-
-    </main>
+    </div>
   </div>
 
-  <!-- FOOTER -->
-  <footer class="footer" id="main-footer" role="contentinfo">
-    <div class="footer__inner">
-      <p class="footer__brand"><span class="footer__logo-mark" aria-hidden="true">◎</span><span>OneSearch</span></p>
-      <p class="footer__privacy">
-        <svg aria-hidden="true" viewBox="0 0 24 24" width="12" height="12"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-        Everything stays in your browser. No servers. No tracking.
-      </p>
-      <p class="footer__copy"><small>&copy; <span id="footer-year"></span> OneSearch.</small></p>
+  <!-- ============================================================
+       Instant scan notification toast (Section 2) — appears the moment
+       a QR is decoded, before the full result card even finishes
+       rendering, so a scared/rushed user sees *something* immediately.
+  ============================================================ -->
+  <div id="qrvToast" hidden class="fixed top-4 left-1/2 -translate-x-1/2 z-[90] max-w-[90%] px-4 py-3 rounded-2xl text-sm font-semibold text-center shadow-2xl border">
+    <span id="qrvToastText"></span>
+  </div>
+
+  <!-- ============================================================
+       Success Story submission form
+  ============================================================ -->
+  <div id="storyFormModal" role="dialog" aria-modal="true" hidden class="fixed inset-0 z-50 flex items-end justify-center bg-black/70">
+    <div class="w-full max-w-[480px] max-h-[88vh] overflow-y-auto bg-panel rounded-t-3xl p-6 border-t border-line">
+      <h2 class="font-display font-bold text-lg mb-1">Share Your Success Story</h2>
+      <p class="text-xs text-neutral-400 mb-4">Aapki kahani cyber awareness badhane mein madad karegi.</p>
+
+      <form id="storyForm" class="space-y-3">
+        <div>
+          <label class="text-xs text-neutral-400" for="storyFullName">Full Name</label>
+          <input id="storyFullName" required maxlength="80" type="text" class="w-full mt-1 rounded-xl bg-ink border border-line p-3 text-sm text-neutral-100">
+        </div>
+        <div>
+          <label class="text-xs text-neutral-400" for="storyCity">Location / City</label>
+          <input id="storyCity" required maxlength="60" type="text" class="w-full mt-1 rounded-xl bg-ink border border-line p-3 text-sm text-neutral-100">
+        </div>
+        <div>
+          <label class="text-xs text-neutral-400" for="storyAmount">Estimated Amount Saved (₹)</label>
+          <input id="storyAmount" required min="0" max="100000000" type="number" class="w-full mt-1 rounded-xl bg-ink border border-line p-3 text-sm text-neutral-100">
+        </div>
+        <div>
+          <label class="text-xs text-neutral-400" for="storyFraudType">Fraud Type</label>
+          <select id="storyFraudType" required class="w-full mt-1 rounded-xl bg-ink border border-line p-3 text-sm text-neutral-100">
+            <option value="QR Code Scam">QR Code Scam</option>
+            <option value="WhatsApp Job Fraud">WhatsApp Job Fraud</option>
+            <option value="Fake Customer Care">Fake Customer Care</option>
+            <option value="Suspicious App">Suspicious App</option>
+            <option value="Other">Other</option>
+          </select>
+        </div>
+        <div>
+          <label class="text-xs text-neutral-400" for="storyDescription">Your Story</label>
+          <textarea id="storyDescription" required minlength="20" maxlength="3000" rows="4" placeholder="QRaksha ne kaise warning di aur aap kaise bache…" class="w-full mt-1 rounded-xl bg-ink border border-line p-3 text-sm text-neutral-100"></textarea>
+        </div>
+
+        <label class="flex items-start gap-2 text-xs text-neutral-300">
+          <input type="checkbox" id="storyAnonymous" class="mt-0.5">
+          Meri kahani bina naam ke (Anonymous) publish karein.
+        </label>
+        <label class="flex items-start gap-2 text-xs text-neutral-300">
+          <input type="checkbox" id="storyConsent" required class="mt-0.5">
+          Main sehmat hoon ki meri kahani cyber awareness badhane ke liye public platforms aur social media par publish ki jaye.
+        </label>
+
+        <p id="storyFormError" class="text-xs text-danger" hidden></p>
+
+        <div class="flex gap-2 pt-2">
+          <button type="submit" id="btnSubmitStory" class="flex-1 py-3 rounded-2xl bg-amber text-ink font-semibold text-sm">Submit</button>
+          <button type="button" id="btnCancelStoryForm" class="flex-1 py-3 rounded-2xl border border-line text-sm">Cancel</button>
+        </div>
+      </form>
     </div>
-  </footer>
+  </div>
+
+  <!-- ============================================================
+       Viral celebration + share modal — shown only after a successful
+       story submission
+  ============================================================ -->
+  <div id="celebrationModal" role="dialog" aria-modal="true" hidden class="fixed inset-0 z-50 flex items-center justify-center bg-black/80 px-6">
+    <div class="w-full max-w-sm bg-panel rounded-3xl p-6 border border-amber/40 text-center">
+      <h2 class="font-display font-bold text-xl mb-3">🏆 Aap Hain Asli Cyber Masiha!</h2>
+      <p class="text-sm text-neutral-300 mb-5 text-left">Badhai ho! Aapne apni samajhdari aur QRaksha app ki madad se fraudster ko hara diya aur apne paise bacha liye. Lekin ladai abhi khatam nahi hui hai! Aaj hazaron masoom log isi fraud ka shikar ho rahe hain. Ek asli masiha baniye—apni yeh jeet ki kahani aur QRaksha app ka link abhi apne WhatsApp, Facebook aur X par share karein. Aapka ek share kisi ki poori zindagi ki kamai doobne se bacha sakta hai!</p>
+
+      <img id="celebrationShareImage" alt="Shareable QRaksha success card" class="w-full rounded-2xl border border-line mb-4">
+
+      <div class="flex flex-col gap-2">
+        <button id="btnCopyShareImage" type="button" class="py-3 rounded-2xl bg-amber text-ink font-semibold text-sm">Copy text &amp; share image</button>
+        <button id="btnShareNative" type="button" class="py-3 rounded-2xl border border-line text-sm">Share Now</button>
+        <button id="btnShareWhatsapp" type="button" class="py-3 rounded-2xl border border-line text-sm">Share on WhatsApp</button>
+        <button id="btnShareX" type="button" class="py-3 rounded-2xl border border-line text-sm">Share on X</button>
+        <button id="btnShareFacebook" type="button" class="py-3 rounded-2xl border border-line text-sm">Share on Facebook</button>
+        <button id="btnCloseCelebration" type="button" class="py-2 text-sm text-neutral-400 mt-1">Maybe later</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================================================
+       Ad-gate overlay — the ONLY place a forced ad ever shows.
+       Never used for: AI analysis results, Panic Mode, or Complain.
+  ============================================================ -->
+  <div id="adGateOverlay" hidden class="fixed inset-0 z-[70] flex flex-col items-center justify-center bg-black/90 text-center px-6">
+    <div class="w-10 h-10 border-2 border-amber border-t-transparent rounded-full animate-spin mb-4"></div>
+    <p id="adGateLabel" class="text-sm text-neutral-300"></p>
+  </div>
 
 </div>
 
-<script src="app.js" defer></script>
+<style>
+  .qrv-navbtn { display:flex; flex-direction:column; align-items:center; gap:2px; padding:10px 0; font-size:11px; color:#8B95A1; }
+  .qrv-navbtn span:first-child { font-size:18px; }
+  .qrv-navbtn.is-active { color:#FFB020; }
+  .qrv-navbtn--complain { color:#EF4444; }
+  .qrv-navbtn--complain span:first-child { font-size:16px; }
+  .qrv-navbtn--complain em { font-style:normal; font-size:8px; color:#8B95A1; }
+  .qrv-gen-tile { display:flex; flex-direction:column; align-items:center; gap:8px; padding:20px 8px; background:#12161B; border:1px solid #232A31; border-radius:16px; font-size:13px; color:#E5E7EB; }
+  .qrv-gen-tile.is-active { border-color: var(--qrv-accent); color: var(--qrv-accent); }
+  .qrv-theme-swatch { padding:14px 0; border-radius:14px; border:1px solid #232A31; background:#12161B; font-size:13px; color:#E5E7EB; }
+  .tab-panel:not([hidden]) { display:block; }
+  .qrv-flag { display:flex; align-items:flex-start; gap:8px; padding:10px 12px; border-radius:12px; background:#0B0E11; border:1px solid #232A31; font-size:13px; color:#E5E7EB; }
+  .qrv-flag[data-severity="critical"] { border-color:#EF4444; }
+  .qrv-flag[data-severity="high"] { border-color:#F5A524; }
+  .qrv-flag__source { flex-shrink:0; font:700 10px/1 'JetBrains Mono',monospace; text-transform:uppercase; letter-spacing:.04em; padding:2px 6px; border-radius:6px; background:#12161B; color:#8B95A1; border:1px solid #232A31; }
+</style>
+
+<!-- NOTE: pin real Subresource Integrity hashes before final submission — see docs/SECURITY.md -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+
+<script src="js/sanitize.js"></script>
+<script src="js/config.js"></script>
+<script src="js/lang.js"></script>
+<script src="js/risk-engine-core.js"></script>
+<script src="js/free-intel-check.js"></script>
+<script src="js/ad-gate.js"></script>
+<script src="js/consent.js"></script>
+<script src="js/panic-mode.js"></script>
+<script src="js/ai-scam-check.js"></script>
+<script src="js/mobile-scanner.js"></script>
+<script src="js/dashboard.js"></script>
+<script type="module" src="js/firebase-init.js"></script>
+<script src="js/story-submit.js"></script>
+<script src="js/mobile-app.js"></script>
+<script>
+  if ("serviceWorker" in navigator) {
+    window.addEventListener("load", () => {
+      navigator.serviceWorker.register("./sw.js").catch(() => {});
+    });
+  }
+</script>
 </body>
 </html>
