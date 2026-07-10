@@ -553,14 +553,13 @@
     window.QRVConsent.init();
     window.QRVPanicMode.init();
 
-    // Render dashboard immediately — don't wait for AI status check.
-    // Cloud Functions may be unavailable (Spark plan), and waiting 4s
-    // for a timeout makes the home screen look broken on every load.
+    // Render UI immediately — don't block on AI status check.
+    // Cloud Functions need Blaze plan; timing out 4s freezes the home tab.
     if (window.QRVDashboard) window.QRVDashboard.init(activateTab);
     if (window.QRVLang) window.QRVLang.init();
     if (window.QRVStorySubmit) window.QRVStorySubmit.init();
 
-    // Restore theme and accent colour from localStorage
+    // Restore saved theme & accent
     try {
       const savedTheme = localStorage.getItem("qrv-theme");
       if (savedTheme) document.body.setAttribute("data-theme", savedTheme);
@@ -570,5 +569,12 @@
         if ($("customAccentInput")) $("customAccentInput").value = savedAccent;
       }
     } catch (e) {}
+
+    // AI status check runs in background after UI is visible
+    window.QRVConfig.refreshAiStatus().then(() => {
+      if ($("aiUnavailableBanner")) $("aiUnavailableBanner").hidden = window.QRVConfig.state.aiAvailable;
+    }).catch(() => {
+      if ($("aiUnavailableBanner")) $("aiUnavailableBanner").hidden = false;
+    });
   });
 })();
