@@ -69,7 +69,65 @@ window.QRVVerification = (function () {
 
     // Generic customer-support-style names/handles common in refund scams.
     SUPPORT_IMPERSONATION_TERMS: ["customer care", "customer support", "helpdesk", "refund team", "verification team", "kyc team"],
+
+    // Well-known brands frequently impersonated in phishing domains/emails,
+    // and their real domains (so we don't flag the genuine site).
+    BRANDS: [
+      { name: "amazon",   real: ["amazon.com", "amazon.in"] },
+      { name: "flipkart", real: ["flipkart.com"] },
+      { name: "sbi",      real: ["sbi.co.in", "onlinesbi.sbi", "onlinesbi.com"] },
+      { name: "hdfc",     real: ["hdfcbank.com"] },
+      { name: "icici",    real: ["icicibank.com"] },
+      { name: "axis",     real: ["axisbank.com"] },
+      { name: "paytm",    real: ["paytm.com"] },
+      { name: "irctc",    real: ["irctc.co.in"] },
+      { name: "lic",      real: ["licindia.in"] },
+      { name: "google",   real: ["google.com"] },
+      { name: "microsoft",real: ["microsoft.com"] },
+      { name: "whatsapp", real: ["whatsapp.com"] },
+      { name: "incometax",real: ["incometax.gov.in"] },
+      { name: "rbi",      real: ["rbi.org.in"] },
+      { name: "kbc",      real: [] }, // "KBC lottery" is always a scam pattern, no legitimate KBC domain exists
+    ],
+
+    // Words that, combined with a brand-lookalike domain, strongly signal
+    // a phishing/verification-scam page rather than an innocent mention.
+    URGENCY_DOMAIN_KEYWORDS: [
+      "security", "alert", "verify", "verification", "update", "kyc",
+      "suspended", "blocked", "refund", "reward", "prize", "winner",
+      "support", "helpdesk", "account", "confirm", "login", "signin",
+    ],
   };
+
+  // Normalizes common leetspeak character substitutions (0→o, 1→l/i, 3→e,
+  // 5→s, 7→t, 4→a, @→a) so "amaz0n" and "amazon" compare equal. Used for
+  // brand-lookalike detection in both the email and URL/website engines.
+  function normalizeLeet(str) {
+    return str
+      .toLowerCase()
+      .replace(/0/g, "o")
+      .replace(/1/g, "l")
+      .replace(/3/g, "e")
+      .replace(/5/g, "s")
+      .replace(/7/g, "t")
+      .replace(/4/g, "a")
+      .replace(/@/g, "a");
+  }
+
+  // Checks a hostname (or email domain) for brand-impersonation: contains
+  // a known brand name (after leetspeak normalization) but isn't that
+  // brand's real domain. Returns { brand, boosted } or null.
+  function detectBrandImpersonation(hostname) {
+    const normalized = normalizeLeet(hostname);
+    for (const b of INTEL.BRANDS) {
+      if (!normalized.includes(b.name)) continue;
+      const isRealDomain = b.real.some((r) => hostname === r || hostname.endsWith(`.${r}`));
+      if (isRealDomain) continue;
+      const hasUrgencyWord = INTEL.URGENCY_DOMAIN_KEYWORDS.some((k) => normalized.includes(k));
+      return { brand: b.name, boosted: hasUrgencyWord };
+    }
+    return null;
+  }
 
   /* ------------------------------------------------------------------
      Numverify: the free tier's key is never used directly from the
@@ -215,12 +273,15 @@ window.QRVVerification = (function () {
       details.push(`Contains reported scam-pattern wording: "${keywordHits[0]}".`);
     }
 
-    // Lookalike-brand detection: brand name present but not as the real domain.
-    const BRANDS = ["sbi", "hdfc", "icici", "paytm", "amazon", "flipkart", "irctc", "lic"];
-    const brandHit = BRANDS.find((b) => hostname.includes(b) && !hostname.endsWith(`${b}.com`) && !hostname.endsWith(`${b}.in`));
+    // Lookalike-brand detection: brand name present (leetspeak-aware) but not the real domain.
+    const brandHit = detectBrandImpersonation(hostname);
     if (brandHit) {
-      riskScore += 30;
-      details.push(`Domain mentions "${brandHit}" but isn't that brand's real domain — a classic lookalike-brand phishing pattern.`);
+      riskScore += brandHit.boosted ? 55 : 30;
+      details.push(
+        brandHit.boosted
+          ? `Domain imitates "${brandHit.brand}" and pairs it with urgency wording (security/alert/verify/etc.) — a strong phishing pattern. This is not ${brandHit.brand}'s real domain.`
+          : `Domain mentions "${brandHit.brand}" but isn't that brand's real domain — a classic lookalike-brand phishing pattern.`
+      );
     }
 
     // Excess subdomains / hyphens — fast-flux-style disposable hosting.
@@ -389,6 +450,18 @@ window.QRVVerification = (function () {
       }
     }
 
+    // Brand-lookalike domain detection (catches leetspeak tricks like
+    // "amaz0n-security-alert.com" that plain substring matching misses).
+    const brandHit = detectBrandImpersonation(domain);
+    if (brandHit) {
+      riskScore += brandHit.boosted ? 55 : 35;
+      details.push(
+        brandHit.boosted
+          ? `Domain ("${domain}") imitates "${brandHit.brand}" and pairs it with urgency wording (security/alert/verify/etc.) — a strong phishing pattern. This is not ${brandHit.brand}'s real domain.`
+          : `Domain ("${domain}") mentions "${brandHit.brand}" but is not that brand's real domain — a lookalike-brand pattern.`
+      );
+    }
+
     if (!details.length) details.push("No known disposable-domain or support-impersonation pattern found.");
 
     return buildVerdict(riskScore, email, details, "email address");
@@ -485,10 +558,10 @@ window.QRVVerification = (function () {
      4. VERDICT CARD RENDERER — with inline AI chat prompt + footer notice
   ------------------------------------------------------------------ */
   const LEVEL_STYLES = {
-    safe: { border: "border-emerald-500/40", bg: "bg-emerald-500/10", text: "text-emerald-400", icon: "✅" },
-    info: { border: "border-sky-500/40", bg: "bg-sky-500/10", text: "text-sky-400", icon: "ℹ️" },
-    warn: { border: "border-amber-500/40", bg: "bg-amber-500/10", text: "text-amber-400", icon: "⚠️" },
-    danger: { border: "border-red-500/50", bg: "bg-red-500/10", text: "text-red-400", icon: "🛑" },
+    safe:   { border: "border-emerald-400/60", bg: "bg-gradient-to-br from-emerald-600 to-emerald-700", text: "text-white", subtext: "text-emerald-50", icon: "✅" },
+    info:   { border: "border-sky-500/40",     bg: "bg-sky-500/10",                                     text: "text-sky-400",   subtext: "text-neutral-300", icon: "ℹ️" },
+    warn:   { border: "border-amber-500/50",   bg: "bg-gradient-to-br from-amber-500/25 to-amber-600/10", text: "text-amber-300", subtext: "text-neutral-200", icon: "⚠️" },
+    danger: { border: "border-red-400/60",     bg: "bg-gradient-to-br from-red-700 to-red-800",         text: "text-white",     subtext: "text-red-50",  icon: "🛑" },
   };
 
   function renderVerdictCard(containerId, verdict, onAskAi, options) {
@@ -496,16 +569,17 @@ window.QRVVerification = (function () {
     if (!container) return;
     const style = LEVEL_STYLES[verdict.level] || LEVEL_STYLES.info;
     const showGovtLink = options && options.showGovtRegistryLink;
+    const bold = verdict.level === "danger" || verdict.level === "safe";
 
     container.innerHTML = `
-      <div class="rounded-2xl border ${style.border} ${style.bg} p-4 transition-all duration-300 ease-out animate-[fadeIn_.25s_ease-out]">
+      <div class="rounded-2xl border ${style.border} ${style.bg} p-4 transition-all duration-300 ease-out animate-[fadeIn_.25s_ease-out] ${bold ? "shadow-lg" : ""}">
         <div class="flex items-start gap-2 mb-2">
           <span class="text-lg" aria-hidden="true">${style.icon}</span>
           <p class="font-semibold text-sm ${style.text}">${escapeHtml(verdict.title)}</p>
         </div>
-        ${verdict.raw ? `<p class="text-[11px] font-mono text-neutral-400 break-all mb-2">${escapeHtml(verdict.raw)}</p>` : ""}
+        ${verdict.raw ? `<p class="text-[11px] font-mono ${bold ? style.subtext : "text-neutral-400"} break-all mb-2 opacity-90">${escapeHtml(verdict.raw)}</p>` : ""}
         <ul class="space-y-1.5 mb-3">
-          ${verdict.details.map((d) => `<li class="text-xs text-neutral-300 leading-relaxed flex gap-1.5"><span class="text-neutral-600">•</span><span>${escapeHtml(d)}</span></li>`).join("")}
+          ${verdict.details.map((d) => `<li class="text-xs ${bold ? style.subtext : "text-neutral-300"} leading-relaxed flex gap-1.5"><span class="opacity-60">•</span><span>${escapeHtml(d)}</span></li>`).join("")}
         </ul>
 
         ${showGovtLink ? `
@@ -525,12 +599,12 @@ window.QRVVerification = (function () {
         </button>
         ` : ""}
 
-        <div class="qrv-ai-chat-prompt">
-          <p class="text-xs text-neutral-300 flex-1">🤖 Want to know how to respond? Ask our AI Assistant...</p>
+        <div class="qrv-ai-chat-prompt ${bold ? "!bg-black/20 !border-white/20" : ""}">
+          <p class="text-xs ${bold ? "text-white" : "text-neutral-300"} flex-1">🤖 Want to know how to respond? Ask our AI Assistant...</p>
           <button type="button" data-verdict-ask-ai class="shrink-0">Chat with AI</button>
         </div>
 
-        <p class="text-[10px] leading-relaxed text-neutral-500 mt-3 pt-3 border-t border-line">
+        <p class="text-[10px] leading-relaxed ${bold ? "text-white/70" : "text-neutral-500"} mt-3 pt-3 border-t ${bold ? "border-white/20" : "border-line"}">
           हम अपने उपयोगकर्ताओं की सुरक्षा के लिए संबंधित सरकारी विनियामक प्राधिकरणों के साथ सीधे संरचनात्मक एकीकरण और आधिकारिक साझेदारी स्थापित करने के लिए सक्रिय रूप से प्रयासरत हैं।
         </p>
       </div>
