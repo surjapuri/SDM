@@ -37,7 +37,20 @@ window.QRVScanner = (function () {
       );
       updateTorchAvailability();
     } catch (err) {
-      $("scanStatusText").textContent = "Camera unavailable — check permissions, or use Upload instead.";
+      const name = err && err.name;
+      let msg;
+      if (name === "NotAllowedError" || name === "PermissionDeniedError") {
+        msg = "Camera access is blocked for this site. Tap the padlock/site-info icon next to the address bar → Permissions → Camera → allow it, then reload. You can also use the 🖼️ Upload button below instead — no camera needed.";
+      } else if (name === "NotFoundError" || name === "DevicesNotFoundError") {
+        msg = "No camera was found on this device. Use the 🖼️ Upload button below to check a QR code from an image instead.";
+      } else if (name === "NotReadableError" || name === "TrackStartError") {
+        msg = "Another app is currently using the camera. Close other camera apps and try again, or use 🖼️ Upload instead.";
+      } else if (location.protocol !== "https:" && location.hostname !== "localhost") {
+        msg = "Camera access needs a secure (https://) connection. Try the 🖼️ Upload button below instead.";
+      } else {
+        msg = "Camera unavailable right now — check your browser's site permissions, or use the 🖼️ Upload button below instead.";
+      }
+      $("scanStatusText").textContent = msg;
     }
   }
 
