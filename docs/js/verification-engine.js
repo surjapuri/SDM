@@ -251,9 +251,11 @@ window.QRVVerification = (function () {
   ------------------------------------------------------------------ */
   async function verifyWebsiteLink(input) {
     let hostname = input;
+    let fullUrl = input;
     try {
       const withProto = /^https?:\/\//i.test(input) ? input : `https://${input}`;
       hostname = new URL(withProto).hostname.toLowerCase();
+      fullUrl = withProto;
     } catch (e) {
       return { level: "warn", title: "That doesn't look like a valid URL", details: ["Double-check the link and try again."], raw: input };
     }
@@ -319,11 +321,16 @@ window.QRVVerification = (function () {
 
     // Google Safe Browsing — only runs if a referrer-restricted key has
     // been configured (see config.js). Silently skipped otherwise.
-    const gsbHit = await checkGoogleSafeBrowsing(hostname);
+    const gsbHit = await checkGoogleSafeBrowsing(fullUrl, hostname);
     if (gsbHit) {
       riskScore += 60;
       details.unshift(gsbHit);
     }
+    // Visible confirmation of whether the key loaded at all — helps
+    // debugging from the UI alone without needing devtools on mobile.
+    // Safe to remove once you've confirmed it's working.
+    const gsbConfigured = Boolean(window.QRVConfig && window.QRVConfig.GOOGLE_SAFE_BROWSING_KEY);
+    details.push(gsbConfigured ? "[Debug] Google Safe Browsing: key loaded, checked live." : "[Debug] Google Safe Browsing: no key loaded — skipped.");
 
     if (!details.length) details.push("No known suspicious TLD, brand-lookalike, or scam keyword pattern found in this URL, and it's not on the live phishunt.io threat feed.");
 
@@ -336,12 +343,16 @@ window.QRVVerification = (function () {
      is configured, this silently returns null so the app degrades
      gracefully to the free offline + phishunt checks above.
   ------------------------------------------------------------------ */
-  async function checkGoogleSafeBrowsing(hostname) {
+  async function checkGoogleSafeBrowsing(fullUrl, hostname) {
     const apiKey = window.QRVConfig && window.QRVConfig.GOOGLE_SAFE_BROWSING_KEY;
     if (!apiKey) return null;
     try {
       const controller = new AbortController();
       const t = setTimeout(() => controller.abort(), 3500);
+      // Check both the exact URL (path matters — many real phishing
+      // pages and Google's own test URLs only trigger on a specific
+      // path, not the bare domain) and the http:// variant of it.
+      const httpVariant = fullUrl.replace(/^https:\/\//i, "http://");
       const res = await fetch(
         `https://safebrowsing.googleapis.com/v4/threatMatches:find?key=${encodeURIComponent(apiKey)}`,
         {
@@ -354,7 +365,7 @@ window.QRVVerification = (function () {
               threatTypes: ["MALWARE", "SOCIAL_ENGINEERING", "UNWANTED_SOFTWARE", "POTENTIALLY_HARMFUL_APPLICATION"],
               platformTypes: ["ANY_PLATFORM"],
               threatEntryTypes: ["URL"],
-              threatEntries: [{ url: `https://${hostname}` }, { url: `http://${hostname}` }],
+              threatEntries: [{ url: fullUrl }, { url: httpVariant }, { url: hostname }],
             },
           }),
         }
