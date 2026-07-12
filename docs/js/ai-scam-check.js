@@ -143,7 +143,7 @@ window.QRVAiScamCheck = (function () {
     let result = combineResults({ offline, freeIntel, ai: null });
     renderMessageResult(result, { aiRan: false });
 
-    // Offer AI second opinion only if it's actually usable right now
+    // Offer AI Advance Opinion only if it's actually usable right now
     const showAiButton = window.QRVConfig.state.aiAvailable;
     $("btnAiSecondOpinionMsg").hidden = !showAiButton;
     $("aiUnavailableBanner").hidden = window.QRVConfig.state.aiAvailable;
@@ -154,7 +154,7 @@ window.QRVAiScamCheck = (function () {
         $("btnAiSecondOpinionMsg").textContent = "Checking with AI\u2026";
         const ai = await callAiCheckMessage(text);
         $("btnAiSecondOpinionMsg").disabled = false;
-        $("btnAiSecondOpinionMsg").textContent = "Get AI second opinion";
+        $("btnAiSecondOpinionMsg").textContent = "Get AI Advance Opinion";
         if (!ai) {
           $("aiUnavailableBanner").hidden = false;
           return;
@@ -215,7 +215,7 @@ window.QRVAiScamCheck = (function () {
         btn.textContent = "Checking with AI\u2026";
         const ai = await callAiCheckMessage(getDecodedText());
         btn.disabled = false;
-        btn.textContent = "Get AI second opinion";
+        btn.textContent = "Get AI Advance Opinion";
         if (!ai) { window.QRVUtils && window.QRVUtils.toast && window.QRVUtils.toast("AI check unavailable right now."); return; }
         setText($("qrExplanation"), ai.explanation || $("qrExplanation").textContent);
       });

@@ -65,11 +65,11 @@ window.QRVLang = (function () {
       confirmedRisk: "Confirmed Risk",
 
       /* AI & analysis */
-      analyzeAiBtn: "Analyze with AI — deeper check, instant result",
-      analyzeWithAi: "Analyze with AI",
+      analyzeAiBtn: "Advance Analyse with AI — deeper check, instant result",
+      analyzeWithAi: "Advance Analyse",
       askAiPrompt: "Want to know how to avoid this scam? Ask our AI Assistant.",
       chatWithAi: "Chat with AI",
-      aiDisclaimer: "Free basic check always runs automatically. AI second opinion is optional and never delayed by ads.",
+      aiDisclaimer: "Free basic check always runs automatically. AI Advance Opinion is optional and never delayed by ads.",
 
       /* Panic mode */
       panicTitle: "Stop. Think. Act.",

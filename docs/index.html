@@ -389,10 +389,10 @@
         <button id="btnAnalyzeAI" type="button"
           class="w-full py-3 rounded-2xl bg-amber text-ink font-semibold text-sm"
           data-i18n="analyzeAiBtn">
-          Analyze with AI — deeper check, instant result
+          Advance Analyse with AI — deeper check, instant result
         </button>
         <p class="text-[11px] text-neutral-500 text-center mt-2" data-i18n="aiDisclaimer">
-          Free basic check always runs automatically. AI second opinion is optional and never delayed by ads.
+          Free basic check always runs automatically. AI Advance Opinion is optional and never delayed by ads.
         </p>
 
         <!-- Chat with AI prompt -->
@@ -463,7 +463,7 @@
 
       <p id="aiUnavailableBanner" hidden
          class="mt-3 text-xs text-warn bg-warn/10 border border-warn/30 rounded-xl p-3">
-        AI second opinion is currently unavailable — showing offline + open threat-intel analysis only.
+        AI Advance Opinion is currently unavailable — showing offline + open threat-intel analysis only.
       </p>
 
       <div id="msgReportSection" hidden class="mt-4 rounded-3xl bg-panel border border-line p-5">
@@ -472,7 +472,7 @@
         <div id="msgRiskFlags"    class="space-y-2 mb-3"></div>
         <button id="btnAiSecondOpinionMsg" type="button" hidden
           class="w-full py-2.5 rounded-xl border border-amber text-amber text-sm font-medium">
-          Get AI second opinion
+          Get AI Advance Opinion
         </button>
         <p class="text-[10px] leading-relaxed text-neutral-500 mt-3 pt-3 border-t border-line">
           <strong class="text-neutral-400">Important Disclaimer:</strong>
@@ -771,7 +771,7 @@
          style="-webkit-overflow-scrolling:touch;">
       <h2 class="font-display font-bold text-lg mb-3">Privacy Policy</h2>
       <p class="text-sm text-neutral-300 mb-3">QR scanning and offline message checks run entirely in your browser — nothing is sent anywhere.</p>
-      <p class="text-sm text-neutral-300 mb-3">The optional AI second opinion sends only the text/image you explicitly submit to our server. It is not stored afterward.</p>
+      <p class="text-sm text-neutral-300 mb-3">The optional AI Advance Opinion sends only the text/image you explicitly submit to our server. It is not stored afterward.</p>
       <p class="text-sm text-neutral-300 mb-3">Success stories you explicitly submit are stored in our database. A human reviews each story before it is published.</p>
       <p class="text-sm text-neutral-300 mb-5">We do not sell user data. We do not show targeted ads.</p>
       <button id="btnClosePrivacy" type="button"
@@ -785,11 +785,11 @@
   <div id="consentModal" role="dialog" aria-modal="true" hidden
        class="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-6">
     <div class="w-full max-w-sm bg-panel rounded-3xl p-6 border border-line">
-      <h2 class="font-display font-bold text-lg mb-2">Enable AI second opinion?</h2>
-      <p class="text-sm text-neutral-300 mb-4">Offline and free threat-intel checks always run automatically. An AI second opinion sends the text/image to our server, which forwards it to Claude API. Nothing is stored afterward.</p>
+      <h2 class="font-display font-bold text-lg mb-2">Enable AI Advance Opinion?</h2>
+      <p class="text-sm text-neutral-300 mb-4">Offline and free threat-intel checks always run automatically. An AI Advance Opinion sends the text/image to our server, which forwards it to Mesh API. Nothing is stored afterward.</p>
       <label class="flex items-center gap-2 text-sm mb-4">
         <input type="checkbox" id="consentCheckbox">
-        I understand and want to enable AI second opinion
+        I understand and want to enable AI Advance Opinion
       </label>
       <div class="flex gap-2">
         <button id="btnConsentAccept"  type="button" class="flex-1 py-2.5 rounded-xl bg-amber text-ink font-semibold text-sm">Enable</button>
@@ -947,24 +947,24 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"          crossorigin="anonymous"></script>
 
 <!-- App modules — ORDER MATTERS -->
-<script src="js/sanitize.js?v=20260712h"></script>
-<script src="js/runtime-config.js?v=20260712h"></script>
-<script src="js/github-config.js?v=20260712h"></script>
-<script src="js/config.js?v=20260712h"></script>
-<script src="js/lang.js?v=20260712h"></script>
-<script src="js/risk-engine-core.js?v=20260712h"></script>
-<script src="js/free-intel-check.js?v=20260712h"></script>
-<script src="js/verification-engine.js?v=20260712h"></script>
-<script src="js/ad-gate.js?v=20260712h"></script>
-<script src="js/consent.js?v=20260712h"></script>
-<script src="js/panic-mode.js?v=20260712h"></script>
-<script src="js/ai-scam-check.js?v=20260712h"></script>
-<script src="js/mobile-scanner.js?v=20260712h"></script>
-<script src="js/dashboard.js?v=20260712h"></script>
-<script src="js/scam-shield.js?v=20260712h"></script>
+<script src="js/sanitize.js?v=20260712i"></script>
+<script src="js/runtime-config.js?v=20260712i"></script>
+<script src="js/github-config.js?v=20260712i"></script>
+<script src="js/config.js?v=20260712i"></script>
+<script src="js/lang.js?v=20260712i"></script>
+<script src="js/risk-engine-core.js?v=20260712i"></script>
+<script src="js/free-intel-check.js?v=20260712i"></script>
+<script src="js/verification-engine.js?v=20260712i"></script>
+<script src="js/ad-gate.js?v=20260712i"></script>
+<script src="js/consent.js?v=20260712i"></script>
+<script src="js/panic-mode.js?v=20260712i"></script>
+<script src="js/ai-scam-check.js?v=20260712i"></script>
+<script src="js/mobile-scanner.js?v=20260712i"></script>
+<script src="js/dashboard.js?v=20260712i"></script>
+<script src="js/scam-shield.js?v=20260712i"></script>
 <script type="module" src="js/firebase-init.js"></script>
-<script src="js/story-submit.js?v=20260712h"></script>
-<script src="js/mobile-app.js?v=20260712h"></script>
+<script src="js/story-submit.js?v=20260712i"></script>
+<script src="js/mobile-app.js?v=20260712i"></script>
 
 <script>
   /* Inline language picker in panic modal — wired here to keep panic-mode.js dependency-free */

@@ -412,7 +412,7 @@
     const aiBtn = $("btnAnalyzeAI");
     if (aiBtn) {
       aiBtn.disabled    = false;
-      aiBtn.textContent = "Analyze with AI — deeper check, instant result";
+      aiBtn.textContent = "Advance Analyse with AI — deeper check, instant result";
     }
 
     // Hide toast.
@@ -434,7 +434,7 @@
   }
 
   /* ====================================================================
-     ROUTE B — "Analyze with AI" (NOT ad-gated, requires consent)
+     ROUTE B — "Advance Analyse" (NOT ad-gated, requires consent)
   ==================================================================== */
   $("btnAnalyzeAI").addEventListener("click", () => {
     window.QRVConsent.requireConsent(async () => {
@@ -442,7 +442,7 @@
       $("btnAnalyzeAI").textContent = "Analyzing…";
       await window.QRVAiScamCheck.runMessageCheck(lastDecodedText || "");
       $("btnAnalyzeAI").disabled    = false;
-      $("btnAnalyzeAI").textContent = "Analyze with AI — deeper check, instant result";
+      $("btnAnalyzeAI").textContent = "Advance Analyse with AI — deeper check, instant result";
       activateTab("tabMessage");
     });
   });
