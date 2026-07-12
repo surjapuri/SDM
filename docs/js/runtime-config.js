@@ -13,8 +13,6 @@ window.QRV_RUNTIME_CONFIG = {
   firebaseAppId:           "",
   functionsBaseUrl:        "",
   aiFeaturesEnabled:       false,
-  // Restricted by HTTP referrer in Google Cloud Console — safe to expose
-  // client-side, same reasoning as the Firebase config above.
-  googleSafeBrowsingKey:   "",
-  generatedAt:             "2026-07-10T17:59:17Z",
+  googleSafeBrowsingKey:   "AIzaSyApHx3DP93LSwNdtpt8sS3utOsXq1CSEA4",
+  generatedAt:             "2026-07-12T08:27:41Z",
 };
