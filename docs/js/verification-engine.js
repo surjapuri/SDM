@@ -280,6 +280,16 @@ window.QRVVerification = (function () {
         riskScore += 40;
         details.unshift(abuseHit);
       }
+      // Visible debug line — same reasoning as the Safe Browsing one
+      // below. Remove once confirmed working.
+      const abuseConfigured = Boolean(window.QRV_ABUSEIPDB_KEY);
+      details.push(
+        !abuseConfigured
+          ? "[Debug] AbuseIPDB: no key loaded — skipped."
+          : abuseHit
+            ? "[Debug] AbuseIPDB: key loaded, checked live, hit above threshold."
+            : "[Debug] AbuseIPDB: key loaded, checked live, no result (score below 25% or lookup failed)."
+      );
     }
 
     const tldHit = INTEL.SUSPICIOUS_TLDS.find((tld) => hostname.endsWith(tld));
