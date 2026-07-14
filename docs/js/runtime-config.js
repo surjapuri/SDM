@@ -7,12 +7,12 @@
 window.QRV_RUNTIME_CONFIG = {
   firebaseApiKey:          "",
   firebaseAuthDomain:      "",
-  firebaseProjectId:       "qraksha-india",
+  firebaseProjectId:       "",
   firebaseStorageBucket:   "",
   firebaseMessagingSender: "",
   firebaseAppId:           "",
   functionsBaseUrl:        "",
   aiFeaturesEnabled:       false,
-  googleSafeBrowsingKey:   "AIzaSyApHx3DP93LSwNdtpt8sS3utOsXq1CSEA4",
-  generatedAt:             "2026-07-12T20:33:45Z",
+  googleSafeBrowsingKey:   "",
+  generatedAt:             "2026-07-14T23:03:20Z",
 };
