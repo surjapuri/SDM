@@ -98,7 +98,16 @@ window.QRVDashboard = (function () {
       checkBtn.disabled = true;
       checkBtn.textContent = "Checking\u2026";
 
-      const verdict = await window.QRVVerification.handleVerificationCheck(prompt.engineKey, value);
+      const HARD_CEILING_MS = 9000;
+      const verdict = await Promise.race([
+        window.QRVVerification.handleVerificationCheck(prompt.engineKey, value),
+        new Promise((resolve) => setTimeout(() => resolve({
+          level: "warn",
+          title: "Check took too long — showing local result only",
+          details: ["A background check (live threat-feed or community database) didn't respond in time. The instant local pattern checks still ran and found no other reason to flag this — but please still verify independently if you're unsure."],
+          raw: value,
+        }), HARD_CEILING_MS)),
+      ]);
 
       checkBtn.disabled = false;
       checkBtn.textContent = (window.QRVLang ? window.QRVLang.t("checkNow") : "Check now");

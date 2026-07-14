@@ -90,6 +90,25 @@ window.QRVVerification = (function () {
   }
 
   /* ------------------------------------------------------------------
+     Hard safety net: NOTHING in this file is allowed to hang the UI
+     forever. Every external call (fetch, Firestore query, etc.) is
+     wrapped in this, so a stalled network request or a misconfigured
+     backend degrades to "skip this signal" within a few seconds instead
+     of leaving the "Checking..." button stuck indefinitely.
+  ------------------------------------------------------------------ */
+  function withTimeout(promise, ms, fallbackValue) {
+    return new Promise((resolve) => {
+      let settled = false;
+      const timer = setTimeout(() => {
+        if (!settled) { settled = true; resolve(fallbackValue); }
+      }, ms);
+      Promise.resolve(promise)
+        .then((v) => { if (!settled) { settled = true; clearTimeout(timer); resolve(v); } })
+        .catch(() => { if (!settled) { settled = true; clearTimeout(timer); resolve(fallbackValue); } });
+    });
+  }
+
+  /* ------------------------------------------------------------------
      2. CORE ROUTER
   ------------------------------------------------------------------ */
   /* ------------------------------------------------------------------
@@ -101,7 +120,8 @@ window.QRVVerification = (function () {
   async function loadGlobalSignatures() {
     if (globalSigCache) return globalSigCache;
     try {
-      const res = await fetch("data/global-scam-signatures.json");
+      const res = await withTimeout(fetch("data/global-scam-signatures.json"), 4000, null);
+      if (!res) throw new Error("timeout");
       const data = await res.json();
       globalSigCache = data.category_type_mapping || {};
     } catch (e) {
@@ -150,7 +170,7 @@ window.QRVVerification = (function () {
       // Community layer: instant check against crowd-reported exact
       // matches, before running the slower local regex/keyword analysis.
       if (window.QRVFirebase && window.QRVFirebase.checkScamSignature) {
-        const communityHit = await window.QRVFirebase.checkScamSignature(input);
+        const communityHit = await withTimeout(window.QRVFirebase.checkScamSignature(input), 4000, null);
         if (communityHit) {
           return {
             level: "danger",
