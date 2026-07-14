@@ -42,7 +42,7 @@
 
   /* ------------------------------------------------------------------
      Message check — text path (always available, Tier 1 + Tier 2 run
-     with zero network; Tier 3 only via the "Get AI Advance Opinion" flow
+     with zero network; Tier 3 only via the "Get AI second opinion" flow
      already wired inside ai-scam-check.js)
   ------------------------------------------------------------------ */
   $("btnCheckMessage").addEventListener("click", async () => {
@@ -115,7 +115,7 @@
 
   /* ------------------------------------------------------------------
      Ambiguous-QR escalation — listens for the event dispatched by the
-     unmodified qr-verify-core.js, shows "Get AI Advance Opinion" only
+     unmodified qr-verify-core.js, shows "Get AI second opinion" only
      when the offline score lands in the 25-75 band, and only if AI is
      actually available right now.
   ------------------------------------------------------------------ */

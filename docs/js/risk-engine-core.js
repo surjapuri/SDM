@@ -9,26 +9,6 @@
 window.QRVEngine = (function () {
   "use strict";
 
-  /* ------------------------------------------------------------------
-     BUGFIX (2026-07-09): these two arrays were referenced by
-     parseQRContent()/computeRisk() below but never actually copied over
-     during the extraction from qr-verify-core.js, so any URL-type QR
-     scanned through the mobile-app.js path (window.QRVEngine.*) threw
-     "SHORTENERS is not defined" / "SUSPICIOUS_KEYWORDS is not defined"
-     and crashed before producing a result. Restored to match the
-     canonical lists in qr-verify-core.js so both engines score
-     identically instead of drifting out of sync.
-  ------------------------------------------------------------------ */
-  const SHORTENERS = [
-    "bit.ly", "tinyurl.com", "cutt.ly", "rebrand.ly", "t.co", "is.gd",
-    "ow.ly", "shorturl.at", "buff.ly", "shorte.st", "adf.ly", "lnkd.in", "tiny.cc",
-  ];
-
-  const SUSPICIOUS_KEYWORDS = [
-    "login", "verify", "reward", "gift", "bonus", "otp", "bank", "payment",
-    "wallet", "update", "free", "urgent", "win", "crypto", "secure", "confirm", "suspend",
-  ];
-
   function parseQRContent(raw) {
     const text = (raw || "").trim();
     const result = {
@@ -374,34 +354,6 @@ window.QRVEngine = (function () {
       const mentionsBrand = brandWords.some((w) => domainLower.includes(w));
       if (mentionsBrand && !isOfficial) {
         addFlag("critical", 35, "The domain references a well-known brand name but does not match that brand's official domain — a strong sign of impersonation.");
-      }
-
-      // Social-platform username/path impersonation — a legitimate platform
-      // domain (facebook.com, twitter.com/x.com, instagram.com, t.me, etc.)
-      // says nothing about who owns the *profile*. Scam accounts routinely
-      // pick usernames that borrow a bank/authority's name plus "support"
-      // wording, or a fake military/romance persona — check the path too.
-      const SOCIAL_PLATFORM_DOMAINS = ["facebook.com", "twitter.com", "x.com", "instagram.com", "t.me", "telegram.org", "linkedin.com"];
-      const isSocialPlatform = SOCIAL_PLATFORM_DOMAINS.some((d) => domainLower === d || domainLower.endsWith("." + d));
-      if (isSocialPlatform) {
-        const pathPart = (parsed.raw || "").replace(/^https?:\/\//i, "").split("/").slice(1).join("/").toLowerCase();
-        const pathNormalized = pathPart.replace(/[._-]/g, " ");
-
-        const ORG_NAMES = ["sbi", "hdfc", "icici", "axis", "paytm", "rbi", "irctc", "lic", "cybercrime", "income tax", "customs", "police"];
-        const SUPPORT_WORDS = ["support", "help", "helpdesk", "care", "service", "official", "verified", "helpline", "24x7", "24 7"];
-        const orgHit = ORG_NAMES.find((o) => pathNormalized.includes(o));
-        const supportHit = SUPPORT_WORDS.find((s) => pathNormalized.includes(s));
-        if (orgHit && supportHit) {
-          addFlag("critical", 40, `This profile's username impersonates "${orgHit}" with official-sounding wording ("${supportHit}") — real banks/authorities do not run support accounts through personal social profiles or QR-shared handles.`);
-        }
-
-        const MILITARY_RANKS = ["capt", "captain", "major", "colonel", "general", "lieutenant", "sergeant"];
-        const MILITARY_ORGS = ["us army", "usarmy", "army", "navy", "marine", "peacekeeping", "un mission"];
-        const rankHit = MILITARY_RANKS.find((r) => pathNormalized.includes(r));
-        const orgMilHit = MILITARY_ORGS.find((o) => pathNormalized.includes(o));
-        if (rankHit && orgMilHit) {
-          addFlag("critical", 35, "Profile name pattern (military rank + deployed-overseas persona) matches a well-documented romance-scam template — proceed with extreme caution, especially if this contact asks for money, gifts, or personal details.");
-        }
       }
 
       if (!flags.some((f) => f.severity !== "info")) {

@@ -12,16 +12,6 @@
   },
   "hosting": {
     "public": "docs",
-    "ignore": [
-      "firebase.json",
-      "**/.*",
-      "**/node_modules/**"
-    ]
-  },
-  "emulators": {
-    "functions": {
-      "host": "127.0.0.1",
-      "port": 5005
-    }
+    "ignore": ["firebase.json", "**/.*", "**/node_modules/**"]
   }
 }

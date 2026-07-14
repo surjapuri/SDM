@@ -42,13 +42,12 @@ window.QRVAiScamCheck = (function () {
   }
 
   /* ------------------------------------------------------------------
-     If the pasted text IS a bare URL (nothing else), also run it through
-     the sharper URL-specific engine (suspicious TLDs, lookalike brands,
-     fast-flux subdomain patterns, phishunt.io live feed, global
-     government-signature database) — the generic message rules above
-     only look for known scam PHRASES, so a link like "https://blocklog.xyz"
-     with no scam wording in it previously showed "no risk found" even
-     though the TLD/structure itself is a real signal.
+     If the pasted text IS a bare URL, also run it through the sharper
+     URL-specific engine (suspicious TLDs, lookalike brands, phishunt.io
+     live feed, global signature DB) — the generic message rules above
+     only match known scam PHRASES, so a bare link with no scam wording
+     previously showed "no risk found" even when the domain itself was
+     a real signal.
   ------------------------------------------------------------------ */
   async function urlSpecificCheck(text) {
     const trimmed = text.trim();
@@ -59,7 +58,7 @@ window.QRVAiScamCheck = (function () {
       if (!verdict || !verdict.details) return [];
       const severity = verdict.level === "danger" ? "critical" : verdict.level === "warn" ? "high" : verdict.level === "info" ? "medium" : "low";
       return verdict.details
-        .filter((d) => !d.startsWith("No known")) // skip the "all clear" filler line
+        .filter((d) => !d.startsWith("No known"))
         .map((d) => ({ severity, message: d, source: "url-engine" }));
     } catch (e) {
       return [];
@@ -135,6 +134,55 @@ window.QRVAiScamCheck = (function () {
   /* ------------------------------------------------------------------
      Full pipeline for the Message/Screenshot Check tab
   ------------------------------------------------------------------ */
+  /* ------------------------------------------------------------------
+     Tier 2 — on-device AI (wllama + Qwen2.5-1.5B-Instruct GGUF).
+     Only reached when Mesh API is unavailable. Explicit consent before
+     any download (model is large); low-RAM devices get a warning but
+     the choice stays with the user, not a silent block.
+  ------------------------------------------------------------------ */
+  async function runLocalAiExplain(flags) {
+    if (!window.QRVLocalAI) return;
+    const btn = $("btnLocalAiExplain");
+    const progressEl = $("localAiProgress");
+    const resultEl = $("localAiResult");
+
+    if (!window.QRVLocalAI.hasUserConsented()) {
+      const warnExtra = window.QRVLocalAI.isLikelyLowMemoryDevice()
+        ? "\n\nNote: this device reports lower available memory — the download may still work, but could be slow or fail on very old phones."
+        : "";
+      const ok = window.confirm(
+        "Download a one-time offline AI model (~700MB–1GB) so scam explanations work even with Mesh AI down or no internet? " +
+        "Recommended on Wi-Fi. It's cached after this, so it only downloads once." + warnExtra
+      );
+      window.QRVLocalAI.setUserConsent(ok);
+      if (!ok) return;
+    }
+
+    btn.disabled = true;
+    progressEl.hidden = false;
+    progressEl.textContent = "Preparing on-device model\u2026";
+
+    try {
+      await window.QRVLocalAI.ensureModelLoaded((fraction) => {
+        progressEl.textContent = `Loading on-device model\u2026 ${Math.round(fraction * 100)}%`;
+      });
+      progressEl.textContent = "Generating explanation on-device (no data leaves your phone)\u2026";
+      const explanation = await window.QRVLocalAI.explainWithLocalModel(
+        flags,
+        window.QRVLang ? window.QRVLang.currentLangForAi() : "English"
+      );
+      progressEl.hidden = true;
+      resultEl.hidden = false;
+      resultEl.textContent = explanation || "The on-device model couldn't generate an explanation this time — the flags above are still accurate.";
+      btn.hidden = true;
+    } catch (err) {
+      progressEl.hidden = true;
+      resultEl.hidden = false;
+      resultEl.textContent = "Offline AI explanation isn't available on this device right now (this can happen on older/low-memory phones). The scam flags above are still fully accurate — they just aren't AI-summarized.";
+      btn.disabled = false;
+    }
+  }
+
   async function runMessageCheck(text) {
     const offline = offlineMessageCheck(text);
     const urlFlags = await urlSpecificCheck(text);
@@ -143,10 +191,21 @@ window.QRVAiScamCheck = (function () {
     let result = combineResults({ offline, freeIntel, ai: null });
     renderMessageResult(result, { aiRan: false });
 
-    // Offer AI Advance Opinion only if it's actually usable right now
+    // Offer AI second opinion only if it's actually usable right now
     const showAiButton = window.QRVConfig.state.aiAvailable;
     $("btnAiSecondOpinionMsg").hidden = !showAiButton;
     $("aiUnavailableBanner").hidden = window.QRVConfig.state.aiAvailable;
+
+    // Tier 2: on-device AI, offered specifically when Tier 1 (Mesh API)
+    // isn't reachable AND there's at least one local flag worth
+    // explaining — no point offering an "explain the risk" button on a
+    // totally clean result.
+    const localAiBtn = $("btnLocalAiExplain");
+    if (localAiBtn) {
+      const hasFlags = result.flags && result.flags.length > 0;
+      localAiBtn.hidden = showAiButton || !hasFlags || !window.QRVLocalAI;
+      localAiBtn.onclick = () => runLocalAiExplain(result.flags);
+    }
 
     $("btnAiSecondOpinionMsg").onclick = () => {
       window.QRVConsent.requireConsent(async () => {
@@ -154,7 +213,7 @@ window.QRVAiScamCheck = (function () {
         $("btnAiSecondOpinionMsg").textContent = "Checking with AI\u2026";
         const ai = await callAiCheckMessage(text);
         $("btnAiSecondOpinionMsg").disabled = false;
-        $("btnAiSecondOpinionMsg").textContent = "Get AI Advance Opinion";
+        $("btnAiSecondOpinionMsg").textContent = "Get AI second opinion";
         if (!ai) {
           $("aiUnavailableBanner").hidden = false;
           return;
@@ -215,7 +274,7 @@ window.QRVAiScamCheck = (function () {
         btn.textContent = "Checking with AI\u2026";
         const ai = await callAiCheckMessage(getDecodedText());
         btn.disabled = false;
-        btn.textContent = "Get AI Advance Opinion";
+        btn.textContent = "Get AI second opinion";
         if (!ai) { window.QRVUtils && window.QRVUtils.toast && window.QRVUtils.toast("AI check unavailable right now."); return; }
         setText($("qrExplanation"), ai.explanation || $("qrExplanation").textContent);
       });
