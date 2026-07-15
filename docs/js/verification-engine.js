@@ -320,8 +320,20 @@ window.QRVVerification = (function () {
       clearTimeout(t);
       if (!res.ok) return null;
       const data = await res.json();
-      if (data && data.count > 0) {
-        const hit = data.results[0];
+      if (data && data.count > 0 && Array.isArray(data.results)) {
+        // phishunt's `q=` search is a broad text search across its whole
+        // database (URL, impersonated brand name, etc.) — it can return
+        // results that only loosely mention the query, not necessarily
+        // ones actually hosted on that exact domain. Trusting results[0]
+        // blindly caused false positives (e.g. "github.com" matched an
+        // unrelated entry that just referenced "github" in its content).
+        // Only treat it as a real hit if the domain/URL field itself
+        // actually contains the queried hostname.
+        const hit = data.results.find((r) => {
+          const domainField = String(r.domain || r.url || r.hostname || "").toLowerCase();
+          return domainField.includes(hostname.toLowerCase());
+        });
+        if (!hit) return null; // search matched something unrelated — not a real signal
         return `Listed on the live phishunt.io threat feed (aggregates PhishTank/OpenPhish/Google Safe Browsing/urlscan.io) — first seen ${hit.first_seen ? hit.first_seen.slice(0, 10) : "recently"}${hit.company ? `, impersonating "${hit.company}"` : ""}.`;
       }
       return null;

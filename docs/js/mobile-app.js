@@ -47,17 +47,30 @@
   ------------------------------------------------------------------ */
   let lastDecodedText = null;
 
-  window.addEventListener("qrv:qr-decoded", async (e) => {
+  window.addEventListener("qrv:qr-decoded", (e) => {
     lastDecodedText = e.detail.rawText;
     const parsed = window.QRVEngine.parseQRContent(lastDecodedText);
     const brand = window.QRVEngine.detectBrand(parsed);
     const risk = window.QRVEngine.computeRisk(parsed);
     const explanation = window.QRVEngine.buildExplanation(parsed, risk, brand);
 
+    // Sound + result render happen IMMEDIATELY on decode — this must
+    // never wait on a network call. A previous version awaited the
+    // global-signature check before this point, which silently delayed
+    // both the beep and the visible result by up to several seconds
+    // (worse, or seemingly "nothing happened," if that network call was
+    // slow/blocked) — that was the actual bug, not a scanner failure.
+    showScanToast(risk);
+    renderScanResult({ parsed, brand, risk, explanation });
+
+    // International signature database cross-check now runs in the
+    // BACKGROUND after the user already has their instant result. If it
+    // finds a match, it escalates the same card in place — the user
+    // never has to wait for this to see something happen.
     if (window.QRVVerification) {
-      try {
-        const globalHit = await window.QRVVerification.checkGlobalSignature(lastDecodedText.trim());
-        if (globalHit) {
+      window.QRVVerification.checkGlobalSignature(lastDecodedText.trim())
+        .then((globalHit) => {
+          if (!globalHit) return;
           risk.level = "critical";
           risk.score = 100;
           risk.flags = [
@@ -65,15 +78,14 @@
             { severity: "critical", message: `Verify independently at: ${globalHit.verification_link}` },
             ...(risk.flags || []),
           ];
-        }
-      } catch (err) { /* signature DB unavailable — local analysis still shown */ }
+          // Only re-render if the user is still looking at this same scan
+          // (they haven't already scanned something else in the meantime).
+          if (lastDecodedText === e.detail.rawText) {
+            renderScanResult({ parsed, brand, risk, explanation });
+          }
+        })
+        .catch((err) => { /* signature DB unavailable — instant local result already shown */ });
     }
-
-    // Instant notification the moment the QR is decoded — before the
-    // rest of the result card even finishes rendering below.
-    showScanToast(risk);
-
-    renderScanResult({ parsed, brand, risk, explanation });
   });
 
   /* ------------------------------------------------------------------

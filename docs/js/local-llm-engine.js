@@ -25,8 +25,13 @@
      falls back to Tier 3 automatically.
    ========================================================================== */
 
-const WLLAMA_CDN = "https://cdn.jsdelivr.net/npm/@wllama/wllama@2/esm/index.js";
-const WLLAMA_ASSETS_BASE = "https://cdn.jsdelivr.net/npm/@wllama/wllama@2/esm/";
+const WLLAMA_ESM = "https://cdn.jsdelivr.net/npm/@wllama/wllama@2/esm/index.js";
+// wllama's own documented "no-build-tools" pattern: this helper resolves the
+// correct single-thread/multi-thread .wasm asset paths from the same CDN
+// automatically. Passing a plain URL string to `new Wllama(...)` (the
+// previous bug here) is not a valid config and made every load silently
+// fail — this is not a device/RAM limitation, it was a wrong API call.
+const WLLAMA_CDN_WASM_HELPER = "https://cdn.jsdelivr.net/npm/@wllama/wllama@2/esm/wasm-from-cdn.js";
 // Small, Apache-2.0-licensed, instruction-tuned model — good balance of
 // quality vs. download size vs. mobile CPU inference speed.
 const MODEL_URL = "https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF/resolve/main/qwen2.5-1.5b-instruct-q4_k_m.gguf";
@@ -53,8 +58,9 @@ async function ensureModelLoaded(onProgress) {
   if (loadingPromise) return loadingPromise;
 
   loadingPromise = (async () => {
-    const { Wllama } = await import(WLLAMA_CDN);
-    const instance = new Wllama(WLLAMA_ASSETS_BASE);
+    const { Wllama } = await import(WLLAMA_ESM);
+    const { default: WasmFromCDN } = await import(WLLAMA_CDN_WASM_HELPER);
+    const instance = new Wllama(WasmFromCDN);
     await instance.loadModelFromUrl(MODEL_URL, {
       n_ctx: 1024, // short context — we only ever feed a few sentences of scam flags, not long documents
       progressCallback: onProgress
@@ -68,6 +74,7 @@ async function ensureModelLoaded(onProgress) {
   try {
     return await loadingPromise;
   } catch (err) {
+    console.error("QRVLocalAI: model load failed —", err);
     loadingPromise = null; // allow retry on next call instead of caching a failure forever
     throw err;
   }
