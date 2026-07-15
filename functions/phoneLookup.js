@@ -16,7 +16,7 @@ const { defineSecret } = require("firebase-functions/params");
 const { isRateLimited, getClientIp } = require("./rateLimiter");
 
 const numverifyApiKey = defineSecret("NUMVERIFY_API_KEY");
-const ALLOWED_ORIGIN = ["https://scamdm-ai.web.app", "https://scamdm-ai.firebaseapp.com"];
+const ALLOWED_ORIGIN = ["https://scamdm-ai.web.app", "https://scamdm-ai.firebaseapp.com", "https://surjapuri.github.io"];
 
 exports.phoneLookup = onRequest(
   { secrets: [numverifyApiKey], region: "asia-south1", cors: ALLOWED_ORIGIN },

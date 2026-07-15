@@ -15,7 +15,7 @@ const { onRequest } = require("firebase-functions/v2/https");
 const { db } = require("./firestore");
 const { isRateLimited, getClientIp } = require("./rateLimiter");
 
-const ALLOWED_ORIGIN = ["https://scamdm-ai.web.app", "https://scamdm-ai.firebaseapp.com"];
+const ALLOWED_ORIGIN = ["https://scamdm-ai.web.app", "https://scamdm-ai.firebaseapp.com", "https://surjapuri.github.io"];
 const FRAUD_TYPES = ["QR Code Scam", "WhatsApp Job Fraud", "Fake Customer Care", "Suspicious App", "Other"];
 const MAX_NAME_LEN = 80;
 const MAX_CITY_LEN = 60;
