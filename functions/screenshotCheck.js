@@ -9,11 +9,11 @@ const { validateImageBase64 } = require("./validateInput");
 const { isRateLimited, getClientIp } = require("./rateLimiter");
 
 const meshApiKey = defineSecret("MESH_API_KEY");
-const ALLOWED_ORIGIN = ["https://scamdm-ai.web.app", "https://scamdm-ai.firebaseapp.com", "https://surjapuri.github.io"];
+const ALLOWED_ORIGIN = "https://imtiyazkth.github.io";
 const AI_FEATURE_ENABLED = true;
 
 exports.checkScreenshot = onRequest(
-  { secrets: [meshApiKey], region: "asia-south1", cors: ALLOWED_ORIGIN, memory: "512MiB" },
+  { secrets: [meshApiKey], region: "asia-south1", cors: [ALLOWED_ORIGIN], memory: "512MiB" },
   async (req, res) => {
     if (req.method !== "POST") {
       return res.status(405).json({ error: "Method not allowed" });

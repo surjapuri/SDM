@@ -38,11 +38,15 @@ window.QRVFreeIntel = (function () {
 
   async function fetchJsonSafe(path) {
     try {
-      const res = await fetch(path);
+      const controller = new AbortController();
+      const t = setTimeout(() => controller.abort(), 4000);
+      const res = await fetch(path, { signal: controller.signal });
+      clearTimeout(t);
       if (!res.ok) return null;
       return await res.json();
     } catch (e) {
-      // Missing/stale blocklist file should never break the app — it just
+      // Missing/stale blocklist file, or a slow/hung network request that
+      // hit the 4s timeout above, should never break the app — it just
       // means Tier 2 runs with whatever data it does have.
       return null;
     }

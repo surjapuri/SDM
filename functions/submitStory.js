@@ -15,7 +15,7 @@ const { onRequest } = require("firebase-functions/v2/https");
 const { db } = require("./firestore");
 const { isRateLimited, getClientIp } = require("./rateLimiter");
 
-const ALLOWED_ORIGIN = ["https://scamdm-ai.web.app", "https://scamdm-ai.firebaseapp.com", "https://surjapuri.github.io"];
+const ALLOWED_ORIGIN = "https://imtiyazkth.github.io";
 const FRAUD_TYPES = ["QR Code Scam", "WhatsApp Job Fraud", "Fake Customer Care", "Suspicious App", "Other"];
 const MAX_NAME_LEN = 80;
 const MAX_CITY_LEN = 60;
@@ -31,7 +31,7 @@ function stripTags(str) {
 }
 
 exports.submitStory = onRequest(
-  { region: "asia-south1", cors: ALLOWED_ORIGIN },
+  { region: "asia-south1", cors: [ALLOWED_ORIGIN] },
   async (req, res) => {
     if (req.method !== "POST") {
       return res.status(405).json({ error: "Method not allowed" });

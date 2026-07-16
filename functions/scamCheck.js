@@ -11,7 +11,7 @@ const { isRateLimited, getClientIp } = require("./rateLimiter");
 const meshApiKey = defineSecret("MESH_API_KEY");
 
 // Restrict to your actual deployed frontend — replace before final deploy.
-const ALLOWED_ORIGIN = ["https://scamdm-ai.web.app", "https://scamdm-ai.firebaseapp.com", "https://surjapuri.github.io"];
+const ALLOWED_ORIGIN = "https://imtiyazkth.github.io";
 
 // Server-side mirror of aiStatus.js's flag. Keeping this check here too
 // means someone hitting this endpoint directly (bypassing the frontend's
@@ -19,7 +19,7 @@ const ALLOWED_ORIGIN = ["https://scamdm-ai.web.app", "https://scamdm-ai.firebase
 const AI_FEATURE_ENABLED = true;
 
 exports.checkMessage = onRequest(
-  { secrets: [meshApiKey], region: "asia-south1", cors: ALLOWED_ORIGIN },
+  { secrets: [meshApiKey], region: "asia-south1", cors: [ALLOWED_ORIGIN] },
   async (req, res) => {
     if (req.method !== "POST") {
       return res.status(405).json({ error: "Method not allowed" });

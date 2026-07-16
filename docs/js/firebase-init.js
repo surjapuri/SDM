@@ -39,11 +39,14 @@ window.QRVFirebase = {
       if (!normalized) return null;
       const ref = collection(db, "verified_scam_signatures");
       const q = query(ref, where("signature", "==", normalized), limit(1));
-      const snap = await getDocs(q);
+      const snap = await Promise.race([
+        getDocs(q),
+        new Promise((_, reject) => setTimeout(() => reject(new Error("firestore-timeout")), 4000)),
+      ]);
       if (snap.empty) return null;
       return snap.docs[0].data();
     } catch (e) {
-      return null; // offline or blocked — caller falls back to local-only checks
+      return null; // offline, blocked, or timed out — caller falls back to local-only checks
     }
   },
 

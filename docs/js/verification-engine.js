@@ -26,7 +26,7 @@ window.QRVVerification = (function () {
     // TLDs disproportionately used for throwaway phishing domains.
     // (Not a blanket ban — a .xyz site isn't automatically a scam, this
     // only raises the risk score when combined with other signals.)
-    SUSPICIOUS_TLDS: [".xyz", ".top", ".click", ".win", ".bit", ".bet", ".loan", ".gq", ".tk", ".ml", ".cf", ".rest", ".icu"],
+    SUSPICIOUS_TLDS: [".xyz", ".top", ".click", ".win", ".bit", ".bet", ".loan", ".gq", ".tk", ".ml", ".cf", ".rest", ".icu", ".cam", ".surf", ".cyou", ".buzz", ".sbs", ".cfd", ".party", ".date", ".stream", ".download", ".zip", ".mov"],
 
     // Reported keyword patterns from the National Cyber Crime Portal's
     // public awareness advisories.
@@ -69,7 +69,81 @@ window.QRVVerification = (function () {
 
     // Generic customer-support-style names/handles common in refund scams.
     SUPPORT_IMPERSONATION_TERMS: ["customer care", "customer support", "helpdesk", "refund team", "verification team", "kyc team"],
+
+    // Well-known brands frequently impersonated in phishing domains/emails,
+    // and their real domains (so we don't flag the genuine site).
+    BRANDS: [
+      { name: "amazon",   real: ["amazon.com", "amazon.in"] },
+      { name: "flipkart", real: ["flipkart.com"] },
+      { name: "sbi",      real: ["sbi.co.in", "onlinesbi.sbi", "onlinesbi.com"] },
+      { name: "hdfc",     real: ["hdfcbank.com"] },
+      { name: "icici",    real: ["icicibank.com"] },
+      { name: "axis",     real: ["axisbank.com"] },
+      { name: "paytm",    real: ["paytm.com"] },
+      { name: "irctc",    real: ["irctc.co.in"] },
+      { name: "lic",      real: ["licindia.in"] },
+      { name: "google",   real: ["google.com"] },
+      { name: "microsoft",real: ["microsoft.com"] },
+      { name: "whatsapp", real: ["whatsapp.com"] },
+      { name: "incometax",real: ["incometax.gov.in"] },
+      { name: "rbi",      real: ["rbi.org.in"] },
+      { name: "kbc",      real: [] }, // "KBC lottery" is always a scam pattern, no legitimate KBC domain exists
+      { name: "phonepe",  real: ["phonepe.com"] },
+      { name: "kotak",    real: ["kotak.com"] },
+      { name: "pnb",      real: ["pnbindia.in"] },
+      { name: "airtel",   real: ["airtel.in"] },
+      { name: "jio",      real: ["jio.com"] },
+      { name: "netflix",  real: ["netflix.com"] },
+      { name: "apple",    real: ["apple.com"] },
+      { name: "paypal",   real: ["paypal.com"] },
+      { name: "fedex",    real: ["fedex.com"] },
+      { name: "dhl",      real: ["dhl.com"] },
+      { name: "indiapost",real: ["indiapost.gov.in"] },
+      { name: "uidai",    real: ["uidai.gov.in"] },
+      { name: "epfo",     real: ["epfindia.gov.in"] },
+      { name: "irs",      real: ["irs.gov"] },
+      { name: "coinbase", real: ["coinbase.com"] },
+      { name: "binance",  real: ["binance.com"] },
+    ],
+
+    // Words that, combined with a brand-lookalike domain, strongly signal
+    // a phishing/verification-scam page rather than an innocent mention.
+    URGENCY_DOMAIN_KEYWORDS: [
+      "security", "alert", "verify", "verification", "update", "kyc",
+      "suspended", "blocked", "refund", "reward", "prize", "winner",
+      "support", "helpdesk", "account", "confirm", "login", "signin",
+    ],
   };
+
+  // Normalizes common leetspeak character substitutions (0→o, 1→l/i, 3→e,
+  // 5→s, 7→t, 4→a, @→a) so "amaz0n" and "amazon" compare equal. Used for
+  // brand-lookalike detection in both the email and URL/website engines.
+  function normalizeLeet(str) {
+    return str
+      .toLowerCase()
+      .replace(/0/g, "o")
+      .replace(/1/g, "l")
+      .replace(/3/g, "e")
+      .replace(/5/g, "s")
+      .replace(/7/g, "t")
+      .replace(/4/g, "a")
+      .replace(/@/g, "a");
+  }
+
+  // Checks a hostname (or email domain) for brand-impersonation: contains
+  // a known brand name (after leetspeak normalization) but isn't that
+  // brand's real domain. Returns { brand, boosted } or null.
+  function detectBrandImpersonation(hostname) {
+    const normalized = normalizeLeet(hostname);
+    for (const b of INTEL.BRANDS) {
+      if (!normalized.includes(b.name)) continue;
+      const isRealDomain = b.real.some((r) => hostname === r || hostname.endsWith(`.${r}`));
+      if (isRealDomain) continue;
+      const hasUrgencyWord = INTEL.URGENCY_DOMAIN_KEYWORDS.some((k) => normalized.includes(k));
+      return { brand: b.name, boosted: hasUrgencyWord };
+    }
+    return null;
+  }
 
   /* ------------------------------------------------------------------
      Numverify: the free tier's key is never used directly from the
@@ -90,11 +164,12 @@ window.QRVVerification = (function () {
   }
 
   /* ------------------------------------------------------------------
-     Hard safety net: NOTHING in this file is allowed to hang the UI
-     forever. Every external call (fetch, Firestore query, etc.) is
-     wrapped in this, so a stalled network request or a misconfigured
-     backend degrades to "skip this signal" within a few seconds instead
-     of leaving the "Checking..." button stuck indefinitely.
+     Hard safety net: NOTHING in this file may hang the UI forever. Every
+     external call (fetch, Firestore query) is wrapped in this, so a
+     stalled request or misconfigured backend degrades to "skip this
+     signal" within a few seconds instead of leaving "Checking..."
+     stuck indefinitely — this was the actual cause of both the
+     Website-URL-check hang and the QR-scan-no-result bug.
   ------------------------------------------------------------------ */
   function withTimeout(promise, ms, fallbackValue) {
     return new Promise((resolve) => {
@@ -213,15 +288,37 @@ window.QRVVerification = (function () {
   ------------------------------------------------------------------ */
   async function verifyWebsiteLink(input) {
     let hostname = input;
+    let fullUrl = input;
     try {
       const withProto = /^https?:\/\//i.test(input) ? input : `https://${input}`;
       hostname = new URL(withProto).hostname.toLowerCase();
+      fullUrl = withProto;
     } catch (e) {
       return { level: "warn", title: "That doesn't look like a valid URL", details: ["Double-check the link and try again."], raw: input };
     }
 
     const details = [];
     let riskScore = 0;
+
+    const isRawIp = /^(\d{1,3}\.){3}\d{1,3}$/.test(hostname);
+    if (isRawIp) {
+      riskScore += 30;
+      details.push("The link points directly to an IP address instead of a domain name — a common phishing technique.");
+
+      // AbuseIPDB — OPT-IN ONLY, unlike Google Safe Browsing above.
+      // AbuseIPDB keys cannot be restricted by domain/referrer, so
+      // shipping one in public client-side code lets anyone who views
+      // page source steal it and drain your free quota. This only
+      // activates if you've explicitly set window.QRV_ABUSEIPDB_KEY
+      // yourself (never injected by the GitHub Actions workflow, on
+      // purpose) — an informed choice you make, not a default.
+      const abuseResult = await checkAbuseIPDB(hostname);
+      if (abuseResult.message) {
+        riskScore += 40;
+        details.unshift(abuseResult.message);
+      }
+      details.push(`[Debug] AbuseIPDB: ${abuseResult.debug}`);
+    }
 
     const tldHit = INTEL.SUSPICIOUS_TLDS.find((tld) => hostname.endsWith(tld));
     if (tldHit) {
@@ -235,12 +332,15 @@ window.QRVVerification = (function () {
       details.push(`Contains reported scam-pattern wording: "${keywordHits[0]}".`);
     }
 
-    // Lookalike-brand detection: brand name present but not as the real domain.
-    const BRANDS = ["sbi", "hdfc", "icici", "paytm", "amazon", "flipkart", "irctc", "lic"];
-    const brandHit = BRANDS.find((b) => hostname.includes(b) && !hostname.endsWith(`${b}.com`) && !hostname.endsWith(`${b}.in`));
+    // Lookalike-brand detection: brand name present (leetspeak-aware) but not the real domain.
+    const brandHit = detectBrandImpersonation(hostname);
     if (brandHit) {
-      riskScore += 30;
-      details.push(`Domain mentions "${brandHit}" but isn't that brand's real domain — a classic lookalike-brand phishing pattern.`);
+      riskScore += brandHit.boosted ? 55 : 30;
+      details.push(
+        brandHit.boosted
+          ? `Domain imitates "${brandHit.brand}" and pairs it with urgency wording (security/alert/verify/etc.) — a strong phishing pattern. This is not ${brandHit.brand}'s real domain.`
+          : `Domain mentions "${brandHit.brand}" but isn't that brand's real domain — a classic lookalike-brand phishing pattern.`
+      );
     }
 
     // Excess subdomains / hyphens — fast-flux-style disposable hosting.
@@ -257,15 +357,18 @@ window.QRVVerification = (function () {
       details.unshift(feedHit); // most important signal first
     }
 
-    // Domain-age check via free public RDAP (no key needed) — a domain
-    // registered in the last few days is a classic short-lived-phishing
-    // signal. Skipped silently if RDAP has no data for this TLD or the
-    // lookup fails — this is a bonus signal, not a required one.
-    const ageHit = await checkDomainAge(hostname);
-    if (ageHit) {
-      riskScore += ageHit.riskAdd;
-      details.push(ageHit.message);
+    // Google Safe Browsing — only runs if a referrer-restricted key has
+    // been configured (see config.js). Silently skipped otherwise.
+    const gsbHit = await checkGoogleSafeBrowsing(fullUrl, hostname);
+    if (gsbHit) {
+      riskScore += 60;
+      details.unshift(gsbHit);
     }
+    // Visible confirmation of whether the key loaded at all — helps
+    // debugging from the UI alone without needing devtools on mobile.
+    // Safe to remove once you've confirmed it's working.
+    const gsbConfigured = Boolean(window.QRVConfig && window.QRVConfig.GOOGLE_SAFE_BROWSING_KEY);
+    details.push(gsbConfigured ? "[Debug] Google Safe Browsing: key loaded, checked live." : "[Debug] Google Safe Browsing: no key loaded — skipped.");
 
     if (!details.length) details.push("No known suspicious TLD, brand-lookalike, or scam keyword pattern found in this URL, and it's not on the live phishunt.io threat feed.");
 
@@ -273,34 +376,85 @@ window.QRVVerification = (function () {
   }
 
   /* ------------------------------------------------------------------
-     Free domain-age check via RDAP (rdap.org — a free public gateway to
-     each TLD registry's RDAP service, no key, no registration). WHOIS's
-     raw text format has no standard parser and most registrars don't
-     enable CORS on it; RDAP is WHOIS's structured, CORS-friendlier
-     successor and is what this uses instead.
+     Google Safe Browsing lookup — free tier, requires an HTTP-referrer-
+     restricted API key (see config.js / runtime-config.js). If no key
+     is configured, this silently returns null so the app degrades
+     gracefully to the free offline + phishunt checks above.
   ------------------------------------------------------------------ */
-  async function checkDomainAge(hostname) {
+  async function checkGoogleSafeBrowsing(fullUrl, hostname) {
+    const apiKey = window.QRVConfig && window.QRVConfig.GOOGLE_SAFE_BROWSING_KEY;
+    if (!apiKey) return null;
     try {
-      const parts = hostname.split(".");
-      const registrable = parts.length > 2 ? parts.slice(-2).join(".") : hostname;
       const controller = new AbortController();
-      const t = setTimeout(() => controller.abort(), 3000);
-      const res = await fetch(`https://rdap.org/domain/${registrable}`, { signal: controller.signal });
+      const t = setTimeout(() => controller.abort(), 3500);
+      // Check both the exact URL (path matters — many real phishing
+      // pages and Google's own test URLs only trigger on a specific
+      // path, not the bare domain) and the http:// variant of it.
+      const httpVariant = fullUrl.replace(/^https:\/\//i, "http://");
+      const res = await fetch(
+        `https://safebrowsing.googleapis.com/v4/threatMatches:find?key=${encodeURIComponent(apiKey)}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          signal: controller.signal,
+          body: JSON.stringify({
+            client: { clientId: "qraksha", clientVersion: "1.0" },
+            threatInfo: {
+              threatTypes: ["MALWARE", "SOCIAL_ENGINEERING", "UNWANTED_SOFTWARE", "POTENTIALLY_HARMFUL_APPLICATION"],
+              platformTypes: ["ANY_PLATFORM"],
+              threatEntryTypes: ["URL"],
+              threatEntries: [{ url: fullUrl }, { url: httpVariant }, { url: hostname }],
+            },
+          }),
+        }
+      );
       clearTimeout(t);
       if (!res.ok) return null;
       const data = await res.json();
-      const registrationEvent = (data.events || []).find((e) => e.eventAction === "registration");
-      if (!registrationEvent || !registrationEvent.eventDate) return null;
-      const ageDays = (Date.now() - new Date(registrationEvent.eventDate).getTime()) / 86400000;
-      if (ageDays < 30) {
-        return { riskAdd: 25, message: `Domain was registered only ${Math.max(0, Math.round(ageDays))} day(s) ago — brand-new domains are disproportionately used for short-lived phishing campaigns.` };
+      if (data && Array.isArray(data.matches) && data.matches.length) {
+        const types = [...new Set(data.matches.map((m) => m.threatType))].join(", ");
+        return `Flagged by Google Safe Browsing: ${types}.`;
       }
-      if (ageDays < 180) {
-        return { riskAdd: 10, message: `Domain is under 6 months old (registered ${Math.round(ageDays)} days ago) — newer domains carry somewhat higher risk than established ones.` };
-      }
-      return null; // established domain — not a signal either way
+      return null;
     } catch (e) {
-      return null; // RDAP has no record for this TLD, or the lookup failed/timed out — not held against the URL
+      return null; // offline / timed out / not configured — other checks still apply
+    }
+  }
+
+  /* ------------------------------------------------------------------
+     AbuseIPDB — OPT-IN ONLY. See the comment at the call site for why
+     this is deliberately NOT wired into the GitHub Actions secret
+     injection pattern used for Google Safe Browsing above. To use this,
+     set window.QRV_ABUSEIPDB_KEY = "your-key" yourself in a script tag
+     you control (e.g. a local-only override, or a value you accept the
+     exposure risk for) — knowing that risk is on you, not silently
+     assumed.
+  ------------------------------------------------------------------ */
+  async function checkAbuseIPDB(ip) {
+    const apiKey = window.QRV_ABUSEIPDB_KEY;
+    if (!apiKey) return { message: null, debug: "no key loaded — skipped" };
+    try {
+      const controller = new AbortController();
+      const t = setTimeout(() => controller.abort(), 3500);
+      const res = await fetch(`https://api.abuseipdb.com/api/v2/check?ipAddress=${encodeURIComponent(ip)}&maxAgeInDays=90`, {
+        headers: { Key: apiKey, Accept: "application/json" },
+        signal: controller.signal,
+      });
+      clearTimeout(t);
+      if (!res.ok) {
+        return { message: null, debug: `HTTP ${res.status} from AbuseIPDB — likely bad/expired key, or a CORS block if status is 0/opaque` };
+      }
+      const data = await res.json();
+      const score = data && data.data ? data.data.abuseConfidenceScore : null;
+      if (score === null) {
+        return { message: null, debug: `unexpected response shape: ${JSON.stringify(data).slice(0, 120)}` };
+      }
+      if (score >= 25) {
+        return { message: `AbuseIPDB reports a ${score}% abuse confidence score for this IP address (${data.data.totalReports || 0} reports).`, debug: `checked live, score=${score}%` };
+      }
+      return { message: null, debug: `checked live, score=${score}% (below 25% threshold)` };
+    } catch (e) {
+      return { message: null, debug: `fetch failed — ${e.name === "AbortError" ? "timed out" : "likely CORS-blocked by the browser, since AbuseIPDB's API may not allow direct browser calls"} (${e.message || e})` };
     }
   }
 
@@ -320,23 +474,24 @@ window.QRVVerification = (function () {
       clearTimeout(t);
       if (!res.ok) return null;
       const data = await res.json();
-      if (data && data.count > 0 && Array.isArray(data.results)) {
-        // phishunt's `q=` search is a broad text search across its whole
-        // database (URL, impersonated brand name, etc.) — it can return
-        // results that only loosely mention the query, not necessarily
-        // ones actually hosted on that exact domain. Trusting results[0]
-        // blindly caused false positives (e.g. "github.com" matched an
-        // unrelated entry that just referenced "github" in its content).
-        // Only treat it as a real hit if the domain/URL field itself
-        // actually contains the queried hostname.
-        const hit = data.results.find((r) => {
-          const domainField = String(r.domain || r.url || r.hostname || "").toLowerCase();
-          return domainField.includes(hostname.toLowerCase());
-        });
-        if (!hit) return null; // search matched something unrelated — not a real signal
-        return `Listed on the live phishunt.io threat feed (aggregates PhishTank/OpenPhish/Google Safe Browsing/urlscan.io) — first seen ${hit.first_seen ? hit.first_seen.slice(0, 10) : "recently"}${hit.company ? `, impersonating "${hit.company}"` : ""}.`;
-      }
-      return null;
+      if (!data || !data.count || !Array.isArray(data.results)) return null;
+
+      // CRITICAL: the API's `q` search can be loose/fuzzy or, in some
+      // response shapes, may return unrelated "recent" entries rather
+      // than a true match. Never trust results[0] blindly — only treat
+      // this as a hit if a returned entry's own URL/domain field
+      // genuinely contains (or is contained by) the hostname we asked
+      // about. This is what previously caused false positives like
+      // "console.cloud.google.com" being flagged via an unrelated
+      // "facebook" entry that happened to be first in the response.
+      const hit = data.results.find((r) => {
+        const candidate = ((r.url || r.domain || "") + "").toLowerCase();
+        if (!candidate) return false;
+        return candidate.includes(hostname) || hostname.includes(candidate.replace(/^https?:\/\//, "").split("/")[0]);
+      });
+      if (!hit) return null;
+
+      return `Listed on the live phishunt.io threat feed (aggregates PhishTank/OpenPhish/Google Safe Browsing/urlscan.io) — first seen ${hit.first_seen ? hit.first_seen.slice(0, 10) : "recently"}${hit.company ? `, impersonating "${hit.company}"` : ""}.`;
     } catch (e) {
       return null; // offline / timed out — local checks above still apply
     }
@@ -463,6 +618,18 @@ window.QRVVerification = (function () {
       }
     }
 
+    // Brand-lookalike domain detection (catches leetspeak tricks like
+    // "amaz0n-security-alert.com" that plain substring matching misses).
+    const brandHit = detectBrandImpersonation(domain);
+    if (brandHit) {
+      riskScore += brandHit.boosted ? 55 : 35;
+      details.push(
+        brandHit.boosted
+          ? `Domain ("${domain}") imitates "${brandHit.brand}" and pairs it with urgency wording (security/alert/verify/etc.) — a strong phishing pattern. This is not ${brandHit.brand}'s real domain.`
+          : `Domain ("${domain}") mentions "${brandHit.brand}" but is not that brand's real domain — a lookalike-brand pattern.`
+      );
+    }
+
     if (!details.length) details.push("No known disposable-domain or support-impersonation pattern found.");
 
     return buildVerdict(riskScore, email, details, "email address");
@@ -559,10 +726,10 @@ window.QRVVerification = (function () {
      4. VERDICT CARD RENDERER — with inline AI chat prompt + footer notice
   ------------------------------------------------------------------ */
   const LEVEL_STYLES = {
-    safe: { border: "border-emerald-500/40", bg: "bg-emerald-500/10", text: "text-emerald-400", icon: "✅" },
-    info: { border: "border-sky-500/40", bg: "bg-sky-500/10", text: "text-sky-400", icon: "ℹ️" },
-    warn: { border: "border-amber-500/40", bg: "bg-amber-500/10", text: "text-amber-400", icon: "⚠️" },
-    danger: { border: "border-red-500/50", bg: "bg-red-500/10", text: "text-red-400", icon: "🛑" },
+    safe:   { border: "border-emerald-400/60", bg: "bg-gradient-to-br from-emerald-600 to-emerald-700", text: "text-white", subtext: "text-emerald-50", icon: "✅" },
+    info:   { border: "border-sky-500/40",     bg: "bg-sky-500/10",                                     text: "text-sky-400",   subtext: "text-neutral-300", icon: "ℹ️" },
+    warn:   { border: "border-amber-500/50",   bg: "bg-gradient-to-br from-amber-500/25 to-amber-600/10", text: "text-amber-300", subtext: "text-neutral-200", icon: "⚠️" },
+    danger: { border: "border-red-400/60",     bg: "bg-gradient-to-br from-red-700 to-red-800",         text: "text-white",     subtext: "text-red-50",  icon: "🛑" },
   };
 
   function renderVerdictCard(containerId, verdict, onAskAi, options) {
@@ -570,16 +737,17 @@ window.QRVVerification = (function () {
     if (!container) return;
     const style = LEVEL_STYLES[verdict.level] || LEVEL_STYLES.info;
     const showGovtLink = options && options.showGovtRegistryLink;
+    const bold = verdict.level === "danger" || verdict.level === "safe";
 
     container.innerHTML = `
-      <div class="rounded-2xl border ${style.border} ${style.bg} p-4 transition-all duration-300 ease-out animate-[fadeIn_.25s_ease-out]">
+      <div class="rounded-2xl border ${style.border} ${style.bg} p-4 transition-all duration-300 ease-out animate-[fadeIn_.25s_ease-out] ${bold ? "shadow-lg" : ""}">
         <div class="flex items-start gap-2 mb-2">
           <span class="text-lg" aria-hidden="true">${style.icon}</span>
           <p class="font-semibold text-sm ${style.text}">${escapeHtml(verdict.title)}</p>
         </div>
-        ${verdict.raw ? `<p class="text-[11px] font-mono text-neutral-400 break-all mb-2">${escapeHtml(verdict.raw)}</p>` : ""}
+        ${verdict.raw ? `<p class="text-[11px] font-mono ${bold ? style.subtext : "text-neutral-400"} break-all mb-2 opacity-90">${escapeHtml(verdict.raw)}</p>` : ""}
         <ul class="space-y-1.5 mb-3">
-          ${verdict.details.map((d) => `<li class="text-xs text-neutral-300 leading-relaxed flex gap-1.5"><span class="text-neutral-600">•</span><span>${escapeHtml(d)}</span></li>`).join("")}
+          ${verdict.details.map((d) => `<li class="text-xs ${bold ? style.subtext : "text-neutral-300"} leading-relaxed flex gap-1.5"><span class="opacity-60">•</span><span>${escapeHtml(d)}</span></li>`).join("")}
         </ul>
 
         ${showGovtLink ? `
@@ -599,12 +767,12 @@ window.QRVVerification = (function () {
         </button>
         ` : ""}
 
-        <div class="qrv-ai-chat-prompt">
-          <p class="text-xs text-neutral-300 flex-1">🤖 Want to know how to respond? Ask our AI Assistant...</p>
+        <div class="qrv-ai-chat-prompt ${bold ? "!bg-black/20 !border-white/20" : ""}">
+          <p class="text-xs ${bold ? "text-white" : "text-neutral-300"} flex-1">🤖 Want to know how to respond? Ask our AI Assistant...</p>
           <button type="button" data-verdict-ask-ai class="shrink-0">Chat with AI</button>
         </div>
 
-        <p class="text-[10px] leading-relaxed text-neutral-500 mt-3 pt-3 border-t border-line">
+        <p class="text-[10px] leading-relaxed ${bold ? "text-white/70" : "text-neutral-500"} mt-3 pt-3 border-t ${bold ? "border-white/20" : "border-line"}">
           हम अपने उपयोगकर्ताओं की सुरक्षा के लिए संबंधित सरकारी विनियामक प्राधिकरणों के साथ सीधे संरचनात्मक एकीकरण और आधिकारिक साझेदारी स्थापित करने के लिए सक्रिय रूप से प्रयासरत हैं।
         </p>
       </div>

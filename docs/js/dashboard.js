@@ -38,7 +38,7 @@ window.QRVDashboard = (function () {
       const btn = document.createElement("button");
       btn.type = "button";
       if (cat.featured) {
-        btn.className = "col-span-2 md:col-span-3 flex items-center gap-3 rounded-2xl p-4 text-left bg-gradient-to-r from-[#0B2E6B] to-[#123a82] border border-blue-400/30 shadow-[0_0_16px_rgba(29,78,216,0.35)]";
+        btn.className = "col-span-2 flex items-center gap-3 rounded-2xl p-4 text-left bg-gradient-to-r from-[#0B2E6B] to-[#123a82] border border-blue-400/30 shadow-[0_0_16px_rgba(29,78,216,0.35)]";
         btn.innerHTML = `
           <span class="text-2xl shrink-0" aria-hidden="true">${cat.icon}</span>
           <span class="flex-1 min-w-0">
@@ -104,7 +104,7 @@ window.QRVDashboard = (function () {
         new Promise((resolve) => setTimeout(() => resolve({
           level: "warn",
           title: "Check took too long — showing local result only",
-          details: ["A background check (live threat-feed or community database) didn't respond in time. The instant local pattern checks still ran and found no other reason to flag this — but please still verify independently if you're unsure."],
+          details: ["A background check (live threat-feed or community database) didn't respond in time. Please still verify independently if you're unsure."],
           raw: value,
         }), HARD_CEILING_MS)),
       ]);
