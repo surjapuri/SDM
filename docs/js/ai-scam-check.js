@@ -83,25 +83,30 @@ window.QRVAiScamCheck = (function () {
      config.aiUsable(). Fails soft: any error here must never throw up
      to the UI as a broken state, only as "AI unavailable this time."
   ------------------------------------------------------------------ */
-  async function callAiCheckMessage(text) {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 12000);
+  /* ------------------------------------------------------------------
+     Cloud Mesh AI has been REMOVED from this app by design. The only AI
+     tier now is the on-device model (local-llm-engine.js). This function
+     replaces the old callAiCheckMessage(text) Cloud Function call —
+     same call sites, same "null means unavailable this time" contract,
+     just backed by wllama instead of a server.
+  ------------------------------------------------------------------ */
+  async function callLocalAiExplain(flags) {
+    if (!window.QRVLocalAI) return null;
     try {
-      const res = await fetch(`${window.QRVConfig.FUNCTIONS_BASE_URL}/checkMessage`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          text: window.QRVSanitize.normalizeForAiInput(text),
-          lang: window.QRVLang ? window.QRVLang.currentLangForAi() : "English",
-        }),
-        signal: controller.signal,
-      });
-      clearTimeout(timeout);
-      if (!res.ok) throw new Error(`checkMessage ${res.status}`);
-      return await res.json(); // expected: { score, level, explanation, matchedPattern }
+      // First-ever use: let the user pick which open-source model to
+      // download (size/speed/quality shown). Every subsequent call
+      // resolves instantly with their remembered choice.
+      if (window.QRVModelPicker) {
+        const chosen = await window.QRVModelPicker.choose();
+        if (!chosen) return null; // user cancelled the picker — not an error
+      }
+      const explanation = await window.QRVLocalAI.explainWithLocalModel(
+        flags,
+        window.QRVLang ? window.QRVLang.currentLangForAi() : "English"
+      );
+      return explanation ? { explanation, score: null, matchedPattern: null } : null;
     } catch (err) {
-      clearTimeout(timeout);
-      return null; // caller treats null as "AI unavailable this time"
+      return null; // low-memory device, model failed to load, etc. — caller falls back to local-only result
     }
   }
 
@@ -143,20 +148,31 @@ window.QRVAiScamCheck = (function () {
     let result = combineResults({ offline, freeIntel, ai: null });
     renderMessageResult(result, { aiRan: false });
 
-    // Offer AI Advance Opinion only if it's actually usable right now
-    const showAiButton = window.QRVConfig.state.aiAvailable;
-    $("btnAiSecondOpinionMsg").hidden = !showAiButton;
-    $("aiUnavailableBanner").hidden = window.QRVConfig.state.aiAvailable;
+    // Offline on-device AI is the ONLY AI tier now — always offered
+    // (no "is Mesh reachable" gate, since there's no cloud AI anymore).
+    // If the model was already downloaded+consented in a previous
+    // session, this can run fully automatically; first-time use still
+    // needs the one-time consent+download handled in mobile-app.js's
+    // btnLocalAiExplain wiring.
+    const aiBtn = $("btnAiSecondOpinionMsg");
+    if (aiBtn) {
+      aiBtn.hidden = !window.QRVLocalAI;
+      aiBtn.textContent = "Get Offline AI Opinion (on-device, no internet needed)";
+    }
+    if ($("aiUnavailableBanner")) $("aiUnavailableBanner").hidden = true; // no cloud tier to be "unavailable" anymore
 
     $("btnAiSecondOpinionMsg").onclick = () => {
       window.QRVConsent.requireConsent(async () => {
         $("btnAiSecondOpinionMsg").disabled = true;
-        $("btnAiSecondOpinionMsg").textContent = "Checking with AI\u2026";
-        const ai = await callAiCheckMessage(text);
+        $("btnAiSecondOpinionMsg").textContent = "Loading on-device model\u2026";
+        const ai = await callLocalAiExplain(result.flags);
         $("btnAiSecondOpinionMsg").disabled = false;
-        $("btnAiSecondOpinionMsg").textContent = "Get AI Advance Opinion";
+        $("btnAiSecondOpinionMsg").textContent = "Get Offline AI Opinion (on-device, no internet needed)";
         if (!ai) {
-          $("aiUnavailableBanner").hidden = false;
+          if ($("aiUnavailableBanner")) {
+            setText($("aiUnavailableBanner"), "Offline AI couldn't load on this device right now (this can happen on older/low-memory phones). The scam flags above are still fully accurate — they just aren't AI-summarized.");
+            $("aiUnavailableBanner").hidden = false;
+          }
           return;
         }
         const combined = combineResults({ offline, freeIntel, ai });
@@ -207,16 +223,18 @@ window.QRVAiScamCheck = (function () {
      the 25-75 band. Reuses the same message-check pipeline against the
      decoded QR text (not the raw image).
   ------------------------------------------------------------------ */
-  function wireQrSecondOpinion(getDecodedText) {
+  function wireQrSecondOpinion(getDecodedText, getFlags) {
     const btn = $("btnAiSecondOpinionQr");
+    btn.textContent = "Get Offline AI Opinion";
     btn.onclick = () => {
       window.QRVConsent.requireConsent(async () => {
         btn.disabled = true;
-        btn.textContent = "Checking with AI\u2026";
-        const ai = await callAiCheckMessage(getDecodedText());
+        btn.textContent = "Loading on-device model\u2026";
+        const flags = (typeof getFlags === "function" && getFlags()) || [{ message: getDecodedText() }];
+        const ai = await callLocalAiExplain(flags);
         btn.disabled = false;
-        btn.textContent = "Get AI Advance Opinion";
-        if (!ai) { window.QRVUtils && window.QRVUtils.toast && window.QRVUtils.toast("AI check unavailable right now."); return; }
+        btn.textContent = "Get Offline AI Opinion";
+        if (!ai) { window.QRVUtils && window.QRVUtils.toast && window.QRVUtils.toast("Offline AI couldn't load on this device right now."); return; }
         setText($("qrExplanation"), ai.explanation || $("qrExplanation").textContent);
       });
     };

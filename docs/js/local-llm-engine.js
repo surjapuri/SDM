@@ -1,41 +1,91 @@
 /* ==========================================================================
    LOCAL-LLM-ENGINE.JS
-   On-device offline AI tier for QRaksha, using wllama (a WASM port of
-   llama.cpp, MIT-licensed, maintained by a llama.cpp core contributor)
-   running a small quantized Qwen2.5-1.5B-Instruct GGUF model
-   (Apache 2.0 licensed weights) entirely in the browser — no server,
-   no API key, no per-request cost, works with zero internet after the
-   one-time model download.
+   The ONLY AI tier in QRaksha now — runs entirely on-device via wllama
+   (WASM port of llama.cpp, MIT-licensed) + Qwen2.5-1.5B-Instruct GGUF
+   (Apache 2.0 weights). No server, no API key, no per-request cost, no
+   data ever leaves the device.
 
-   THIS IS TIER 2 in the AI fallback chain:
-     Tier 1 — Mesh API (best quality, needs internet + your server key)
-     Tier 2 — This file (on-device, works offline, needs a one-time
-               ~700MB-1GB model download the first time it's used)
-     Tier 3 — Pure local regex/signature engine (verification-engine.js,
-               risk-engine-core.js) — always works, zero AI, zero download
-
-   HONEST LIMITATIONS (told to the user before they download anything):
-   - First-time download is large (~700MB-1GB) — the UI asks for
-     explicit consent and recommends Wi-Fi before starting.
-   - Inference is slower than Mesh API and quality is lower than a large
-     cloud model — acceptable for short "why is this risky" explanations,
-     not meant to replace Mesh API's accuracy.
-   - Needs a reasonably modern mobile browser; very low-RAM devices
-     (<3GB) may fail to load the model — this is caught and the caller
-     falls back to Tier 3 automatically.
+   Cloud/Mesh AI has been intentionally removed from this app. This file
+   is now the primary (and only) AI explanation source, used AFTER the
+   instant local regex/signature checks (verification-engine.js,
+   risk-engine-core.js, free-intel-check.js) — those always run first
+   and are never replaced by this; this only adds a plain-language
+   explanation on top of facts they already found.
    ========================================================================== */
 
 const WLLAMA_ESM = "https://cdn.jsdelivr.net/npm/@wllama/wllama@2/esm/index.js";
-// wllama's own documented "no-build-tools" pattern: this helper resolves the
+// wllama's own documented no-build-tools pattern: this helper resolves the
 // correct single-thread/multi-thread .wasm asset paths from the same CDN
-// automatically. Passing a plain URL string to `new Wllama(...)` (the
-// previous bug here) is not a valid config and made every load silently
-// fail — this is not a device/RAM limitation, it was a wrong API call.
+// automatically. (A plain URL string passed to `new Wllama(...)` is NOT a
+// valid config and silently fails every load — that was a real bug fixed
+// in this file; it was never a device/RAM limitation.)
 const WLLAMA_CDN_WASM_HELPER = "https://cdn.jsdelivr.net/npm/@wllama/wllama@2/esm/wasm-from-cdn.js";
-// Small, Apache-2.0-licensed, instruction-tuned model — good balance of
-// quality vs. download size vs. mobile CPU inference speed.
-const MODEL_URL = "https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF/resolve/main/qwen2.5-1.5b-instruct-q4_k_m.gguf";
 const MODEL_STORAGE_KEY = "qrv_local_model_consent_v1";
+const SELECTED_MODEL_KEY = "qrv_local_model_choice_v1";
+
+/* ------------------------------------------------------------------
+   Model catalog — 4 open-source, Apache-2.0/MIT-licensed instruct
+   models, all quantized to GGUF (Q4_K_M — the standard "good quality,
+   small size" quantization). User picks one; the app never silently
+   downloads a huge model without an explicit choice.
+
+   These 4 were chosen because they're proven to already run well on
+   real budget/mid-range Android hardware via PocketPal AI (same
+   underlying llama.cpp engine, just native instead of WASM) — so if
+   PocketPal ran them smoothly on a given phone, wllama should too,
+   just somewhat slower since WASM has more overhead than native code.
+------------------------------------------------------------------ */
+const MODEL_CATALOG = [
+  {
+    id: "qwen2.5-1.5b",
+    name: "Qwen2.5-1.5B-Instruct",
+    size: "~1.0 GB",
+    speed: "Fast",
+    quality: "Good",
+    license: "Apache 2.0",
+    url: "https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF/resolve/main/qwen2.5-1.5b-instruct-q4_k_m.gguf",
+    recommended: true,
+  },
+  {
+    id: "llama-3.2-1b",
+    name: "Llama-3.2-1B-Instruct",
+    size: "~0.8 GB",
+    speed: "Fastest",
+    quality: "Basic",
+    license: "Llama 3.2 Community License",
+    url: "https://huggingface.co/bartowski/Llama-3.2-1B-Instruct-GGUF/resolve/main/Llama-3.2-1B-Instruct-Q4_K_M.gguf",
+  },
+  {
+    id: "smollm2-1.7b",
+    name: "SmolLM2-1.7B-Instruct",
+    size: "~1.1 GB",
+    speed: "Fast",
+    quality: "Good",
+    license: "Apache 2.0",
+    url: "https://huggingface.co/bartowski/SmolLM2-1.7B-Instruct-GGUF/resolve/main/SmolLM2-1.7B-Instruct-Q4_K_M.gguf",
+  },
+  {
+    id: "gemma-2-2b",
+    name: "Gemma-2-2B-it",
+    size: "~1.6 GB",
+    speed: "Moderate",
+    quality: "Best",
+    license: "Gemma Terms of Use (custom, has usage restrictions — check before commercial use)",
+    url: "https://huggingface.co/bartowski/gemma-2-2b-it-GGUF/resolve/main/gemma-2-2b-it-Q4_K_M.gguf",
+  },
+];
+
+function getSelectedModel() {
+  const savedId = localStorage.getItem(SELECTED_MODEL_KEY);
+  return MODEL_CATALOG.find((m) => m.id === savedId) || MODEL_CATALOG.find((m) => m.recommended) || MODEL_CATALOG[0];
+}
+function setSelectedModel(modelId) {
+  localStorage.setItem(SELECTED_MODEL_KEY, modelId);
+  // Changing model means the old loaded instance (if any) no longer
+  // matches the user's choice — force a fresh load next time.
+  wllamaInstance = null;
+  loadingPromise = null;
+}
 
 let wllamaInstance = null;
 let loadingPromise = null;
@@ -43,26 +93,22 @@ let loadingPromise = null;
 function hasUserConsented() {
   return localStorage.getItem(MODEL_STORAGE_KEY) === "granted";
 }
-
 function setUserConsent(granted) {
   localStorage.setItem(MODEL_STORAGE_KEY, granted ? "granted" : "declined");
 }
 
-/**
- * Loads wllama + the GGUF model. Only actually downloads anything the
- * FIRST time it's called after consent; the browser's Cache Storage
- * keeps it for every future visit, offline included.
- */
 async function ensureModelLoaded(onProgress) {
   if (wllamaInstance) return wllamaInstance;
   if (loadingPromise) return loadingPromise;
+
+  const model = getSelectedModel();
 
   loadingPromise = (async () => {
     const { Wllama } = await import(WLLAMA_ESM);
     const { default: WasmFromCDN } = await import(WLLAMA_CDN_WASM_HELPER);
     const instance = new Wllama(WasmFromCDN);
-    await instance.loadModelFromUrl(MODEL_URL, {
-      n_ctx: 1024, // short context — we only ever feed a few sentences of scam flags, not long documents
+    await instance.loadModelFromUrl(model.url, {
+      n_ctx: 1024,
       progressCallback: onProgress
         ? ({ loaded, total }) => onProgress(total ? loaded / total : 0)
         : undefined,
@@ -74,26 +120,19 @@ async function ensureModelLoaded(onProgress) {
   try {
     return await loadingPromise;
   } catch (err) {
-    console.error("QRVLocalAI: model load failed —", err);
-    loadingPromise = null; // allow retry on next call instead of caching a failure forever
+    console.error(`QRVLocalAI: model load failed for "${model.name}" —`, err);
+    loadingPromise = null;
     throw err;
   }
 }
 
-/**
- * Generates a short, grounded explanation from a list of risk flags
- * already computed by the local regex/signature engine. Deliberately a
- * narrow, templated task (summarize these specific facts, don't invent
- * new ones) — this plays to a small on-device model's strengths and
- * avoids hallucinated reasoning.
- */
 async function explainWithLocalModel(flags, languageLabel) {
   const instance = await ensureModelLoaded();
   const factList = flags.slice(0, 5).map((f) => `- ${f.message || f}`).join("\n");
   const prompt =
     `You are a calm, factual cyber-safety assistant. Using ONLY the facts below, write a 2-3 sentence explanation ` +
-    `in ${languageLabel || "English"} of why this looks risky, and one clear next step. Do not invent any fact not listed.\n\n` +
-    `Facts:\n${factList}\n\nExplanation:`;
+    `in ${languageLabel || "English"} of why this looks risky (or reassuring, if the facts suggest low risk), and one clear next step. ` +
+    `Do not invent any fact not listed.\n\nFacts:\n${factList || "- No specific risk flags were found."}\n\nExplanation:`;
 
   const output = await instance.createCompletion(prompt, {
     nPredict: 160,
@@ -103,12 +142,10 @@ async function explainWithLocalModel(flags, languageLabel) {
 }
 
 function isLikelyLowMemoryDevice() {
-  // navigator.deviceMemory is a rough hint (GB, capped at 8 by spec) —
-  // not available on all browsers, so treat "unknown" as "don't assume safe."
   if (typeof navigator !== "undefined" && "deviceMemory" in navigator) {
     return navigator.deviceMemory < 4;
   }
-  return false; // unknown — let the user decide via the consent prompt instead of silently blocking
+  return false;
 }
 
 window.QRVLocalAI = {
@@ -117,7 +154,9 @@ window.QRVLocalAI = {
   isLikelyLowMemoryDevice,
   ensureModelLoaded,
   explainWithLocalModel,
-  MODEL_URL,
+  MODEL_CATALOG,
+  getSelectedModel,
+  setSelectedModel,
 };
 
 window.dispatchEvent(new CustomEvent("qrv:local-ai-ready"));

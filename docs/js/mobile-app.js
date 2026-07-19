@@ -502,28 +502,16 @@
         return;
       }
       window.QRVConsent.requireConsent(async () => {
-        try {
-          const reader = new FileReader();
-          const base64 = await new Promise((resolve, reject) => {
-            reader.onload  = () => resolve(reader.result);
-            reader.onerror = reject;
-            reader.readAsDataURL(file);
-          });
-          const res = await fetch(`${window.QRVConfig.FUNCTIONS_BASE_URL}/checkScreenshot`, {
-            method:  "POST",
-            headers: { "Content-Type": "application/json" },
-            body:    JSON.stringify({ image: base64 }),
-          });
-          if (!res.ok) throw new Error(`checkScreenshot ${res.status}`);
-          const data = await res.json();
-          await window.QRVAiScamCheck.runMessageCheck(data.extractedText || "");
-        } catch (err) {
-          $("aiUnavailableBanner").hidden = false;
-          setText(
-            $("aiUnavailableBanner"),
-            "Could not read this screenshot \u2014 the text-extraction service is unavailable right now. Try pasting the message text instead using the \u201cPaste Message\u201d tab."
-          );
-        }
+        // Screenshot text-extraction (OCR) needs cloud vision, which the
+        // on-device model can't do (it's text-only). Cloud/Mesh AI has
+        // been intentionally removed from this app, so there's no OCR
+        // path anymore — tell the user immediately and honestly instead
+        // of attempting a network call that can never succeed.
+        $("aiUnavailableBanner").hidden = false;
+        setText(
+          $("aiUnavailableBanner"),
+          "Screenshot reading needs cloud-based text extraction, which this app no longer uses (offline AI only). Please switch to the \u201cPaste Message\u201d tab and paste the text instead \u2014 that works fully offline."
+        );
       });
       return;
     }
@@ -758,8 +746,23 @@
     if (completed) {
       $("settingsModal").hidden = false;
       enforceSettingsScroll();
+      renderCurrentModelInfo();
     }
   });
+
+  function renderCurrentModelInfo() {
+    const el = $("settingsCurrentModel");
+    if (!el || !window.QRVLocalAI) return;
+    const m = window.QRVLocalAI.getSelectedModel();
+    el.textContent = `${m.name} \u2014 ${m.size}, ${m.quality} quality`;
+  }
+  if ($("btnChangeAiModel")) {
+    $("btnChangeAiModel").addEventListener("click", async () => {
+      if (!window.QRVModelPicker) return;
+      const chosen = await window.QRVModelPicker.choose({ forceShow: true });
+      if (chosen) renderCurrentModelInfo();
+    });
+  }
 
   if ($("btnHomeLanguage")) {
     $("btnHomeLanguage").addEventListener("click", () => {
@@ -890,11 +893,11 @@
     window.QRVConsent.init();
     window.QRVPanicMode.init();
 
-    // AI status check — non-blocking, updates banner after resolve.
-    window.QRVConfig.refreshAiStatus().then((available) => {
-      const banner = $("aiUnavailableBanner");
-      if (banner) banner.hidden = available;
-    });
+    // Cloud Mesh AI has been intentionally removed — no status ping needed
+    // at startup anymore. The offline on-device AI (local-llm-engine.js)
+    // is always "available" in the sense that its button always shows;
+    // whether it actually loads is only known once the user taps it.
+    if ($("aiUnavailableBanner")) $("aiUnavailableBanner").hidden = true;
 
     if (window.QRVDashboard) window.QRVDashboard.init(activateTab);
     if (window.QRVLang)      window.QRVLang.init();
